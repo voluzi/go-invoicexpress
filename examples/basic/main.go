@@ -37,7 +37,7 @@ func main() {
 	item, err := client.Items.Create(ctx, &invoicexpress.ItemCreateRequest{
 		Name:        "Consulting",
 		Description: "Software consulting services",
-		UnitPrice:   100.00,
+		UnitPrice:   invoicexpress.NewDecimal("100.00"),
 		Unit:        "hour",
 		Tax:         &invoicexpress.TaxRef{Name: "IVA23"},
 	})
@@ -60,8 +60,8 @@ func main() {
 		Items: []invoicexpress.ItemRef{
 			{
 				Name:      "Consulting",
-				UnitPrice: 100.00,
-				Quantity:  8,
+				UnitPrice: invoicexpress.NewDecimal("100.00"),
+				Quantity:  invoicexpress.NewDecimal("8"),
 				Unit:      "hour",
 				Tax:       &invoicexpress.TaxRef{Name: "IVA23"},
 			},
@@ -70,7 +70,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("create invoice: %v", err)
 	}
-	fmt.Printf("Created invoice: ID=%d, Total=%.2f\n", inv.ID, inv.Total)
+	fmt.Printf("Created invoice: ID=%d, Total=%s\n", inv.ID, inv.Total)
 
 	// Finalize the invoice.
 	inv, err = client.Invoices.ChangeState(ctx, invoicexpress.DocumentTypeInvoice, inv.ID, invoicexpress.StateFinalized, "")

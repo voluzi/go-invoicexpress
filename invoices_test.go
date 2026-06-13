@@ -26,7 +26,7 @@ func TestInvoicesCreate(t *testing.T) {
 		Date:   NewDate(time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)),
 		Client: ClientRef{Name: "ACME", FiscalID: "500000000"},
 		Items: []ItemRef{
-			{Name: "Plano Pro", UnitPrice: 50, Quantity: 1, Tax: &TaxRef{Name: "IVA23"}},
+			{Name: "Plano Pro", UnitPrice: NewDecimal("50"), Quantity: NewDecimal("1"), Tax: &TaxRef{Name: "IVA23"}},
 		},
 	})
 	if err != nil {
@@ -138,7 +138,12 @@ func TestInvoicesCreateValidationError(t *testing.T) {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		w.Write([]byte(`{"errors":{"date":["is required"]}}`))
 	})
-	_, err := c.Invoices.Create(context.Background(), DocumentTypeInvoice, &InvoiceCreateRequest{})
+	// Valid client-side so the request reaches the server's 422.
+	_, err := c.Invoices.Create(context.Background(), DocumentTypeInvoice, &InvoiceCreateRequest{
+		Date:   NewDate(time.Now()),
+		Client: ClientRef{Name: "ACME"},
+		Items:  []ItemRef{{Name: "X", UnitPrice: NewDecimal("1"), Quantity: NewDecimal("1")}},
+	})
 	if !IsUnprocessable(err) {
 		t.Fatalf("expected 422, got %v", err)
 	}

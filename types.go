@@ -73,13 +73,13 @@ type TaxRef struct {
 // GlobalDiscount represents a discount applied to the whole document.
 type GlobalDiscount struct {
 	ValueType string  `json:"value_type"` // "percentage" or "amount"
-	Value     float64 `json:"value"`
+	Value     Decimal `json:"value"`
 }
 
 // MBReference represents a Multibanco payment reference.
 type MBReference struct {
 	Entity    string  `json:"entity"`
-	Value     float64 `json:"value"`
+	Value     Decimal `json:"value"`
 	Reference string  `json:"reference"`
 }
 
@@ -107,14 +107,16 @@ type ClientSendOptions struct {
 }
 
 // ItemRef is used when creating/updating documents to reference an item.
+// Monetary fields are Decimal so amounts are sent exactly (e.g. mirroring a
+// Stripe charge) without float rounding.
 type ItemRef struct {
-	Name        string  `json:"name"`
-	Description string  `json:"description,omitempty"`
-	UnitPrice   float64 `json:"unit_price,string"`
-	Quantity    float64 `json:"quantity,string"`
-	Unit        string  `json:"unit,omitempty"`
-	Discount    float64 `json:"discount,omitempty,string"`
-	Tax         *TaxRef `json:"tax,omitempty"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	UnitPrice   Decimal  `json:"unit_price"`
+	Quantity    Decimal  `json:"quantity"`
+	Unit        string   `json:"unit,omitempty"`
+	Discount    *Decimal `json:"discount,omitempty"`
+	Tax         *TaxRef  `json:"tax,omitempty"`
 }
 
 // InvoiceCreateRequest holds data for creating an invoice document.
@@ -153,11 +155,11 @@ type Invoice struct {
 	DueDate                Date          `json:"due_date"`
 	Permalink              string        `json:"permalink"`
 	SAFTHash               string        `json:"saft_hash"`
-	Sum                    float64       `json:"sum"`
-	Discount               float64       `json:"discount"`
-	BeforeTaxes            float64       `json:"before_taxes"`
-	Taxes                  float64       `json:"taxes"`
-	Total                  float64       `json:"total"`
+	Sum                    Decimal       `json:"sum"`
+	Discount               Decimal       `json:"discount"`
+	BeforeTaxes            Decimal       `json:"before_taxes"`
+	Taxes                  Decimal       `json:"taxes"`
+	Total                  Decimal       `json:"total"`
 	Currency               string        `json:"currency"`
 	Client                 ClientSummary `json:"client"`
 	Items                  []InvoiceItem `json:"items"`
@@ -181,14 +183,14 @@ type ClientSummary struct {
 type InvoiceItem struct {
 	Name        string  `json:"name"`
 	Description string  `json:"description"`
-	UnitPrice   string  `json:"unit_price"`
+	UnitPrice   Decimal `json:"unit_price"`
 	Unit        string  `json:"unit"`
-	Quantity    string  `json:"quantity"`
+	Quantity    Decimal `json:"quantity"`
 	Tax         TaxRef  `json:"tax"`
-	Discount    float64 `json:"discount"`
-	Subtotal    float64 `json:"subtotal"`
-	TaxAmount   float64 `json:"tax_amount"`
-	Total       float64 `json:"total"`
+	Discount    Decimal `json:"discount"`
+	Subtotal    Decimal `json:"subtotal"`
+	TaxAmount   Decimal `json:"tax_amount"`
+	Total       Decimal `json:"total"`
 }
 
 // ChangeStateRequest holds the data for a state transition.
@@ -218,14 +220,14 @@ type PartialPaymentRequest struct {
 	PaymentMechanism PaymentMechanism `json:"payment_mechanism"`
 	Note             string           `json:"note,omitempty"`
 	Serie            string           `json:"serie,omitempty"`
-	Amount           float64          `json:"amount"`
+	Amount           Decimal          `json:"amount"`
 	PaymentDate      Date             `json:"payment_date"`
 }
 
 // PartialPayment is the payment receipt returned by the API.
 type PartialPayment struct {
 	ID               int64            `json:"id"`
-	Amount           float64          `json:"amount"`
+	Amount           Decimal          `json:"amount"`
 	PaymentDate      Date             `json:"payment_date"`
 	PaymentMechanism PaymentMechanism `json:"payment_mechanism"`
 	Note             string           `json:"note"`
@@ -280,20 +282,20 @@ type Item struct {
 	ID          int64   `json:"id"`
 	Name        string  `json:"name"`
 	Description string  `json:"description"`
-	UnitPrice   float64 `json:"unit_price"`
+	UnitPrice   Decimal `json:"unit_price"`
 	Unit        string  `json:"unit"`
-	Discount    float64 `json:"discount"`
+	Discount    Decimal `json:"discount"`
 	Tax         TaxRef  `json:"tax"`
 }
 
 // ItemCreateRequest holds data for creating an item.
 type ItemCreateRequest struct {
-	Name        string  `json:"name"`
-	Description string  `json:"description,omitempty"`
-	UnitPrice   float64 `json:"unit_price"`
-	Unit        string  `json:"unit,omitempty"`
-	Discount    float64 `json:"discount,omitempty"`
-	Tax         *TaxRef `json:"tax,omitempty"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	UnitPrice   Decimal  `json:"unit_price"`
+	Unit        string   `json:"unit,omitempty"`
+	Discount    *Decimal `json:"discount,omitempty"`
+	Tax         *TaxRef  `json:"tax,omitempty"`
 }
 
 // ItemUpdateRequest holds data for updating an item.
