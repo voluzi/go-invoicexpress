@@ -170,6 +170,16 @@ type Invoice struct {
 	ProprietaryUID         string        `json:"proprietary_uid"`
 }
 
+// Estimate is an estimate document (quote, proforma, fees note). Estimates
+// share the document shape with Invoice — estimate-specific fields are a
+// subset — so this is an alias for ergonomic, self-documenting return types.
+type Estimate = Invoice
+
+// Guide is a transport/shipping/devolution guide document. Guides share the
+// core document shape with Invoice (alias). Guide-specific transport fields
+// beyond the common set are not yet modeled — see the README limitations.
+type Guide = Invoice
+
 // ClientSummary is the client info embedded in invoice responses.
 type ClientSummary struct {
 	ID      int64  `json:"id"`
