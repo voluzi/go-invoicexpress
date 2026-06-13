@@ -7,6 +7,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- `ValidPortugueseNIF` and `Taxes.FindByName` — guards against InvoiceXpress's
+  silent fallbacks (a bad NIF degrades to "Consumidor Final"; an unknown tax
+  name applies the default rate, neither erroring).
+- `examples/draft-invoice` smoke-test command (with an opt-in `-finalize` flag).
 - Functional options for `NewClient`: `WithBaseURL`, `WithHTTPClient`,
   `WithUserAgent`, `WithTimeout`, `WithRetry`, `WithRateLimit`.
 - Automatic retries with exponential backoff + full jitter on HTTP 429 and 5xx

@@ -74,6 +74,7 @@ type ItemsAPI interface {
 // TaxesAPI is the behaviour of TaxesService.
 type TaxesAPI interface {
 	List(ctx context.Context) ([]Tax, error)
+	FindByName(ctx context.Context, name string) (*Tax, error)
 	Get(ctx context.Context, id int64) (*Tax, error)
 	Create(ctx context.Context, req *TaxCreateRequest) (*Tax, error)
 	Update(ctx context.Context, id int64, req *TaxUpdateRequest) error

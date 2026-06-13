@@ -2,6 +2,7 @@ package invoicexpress
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -80,6 +81,23 @@ func TestTaxesList(t *testing.T) {
 	taxes, err := c.Taxes.List(context.Background())
 	if err != nil || len(taxes) != 1 || taxes[0].Value != 23 {
 		t.Fatalf("taxes.list: %v %v", err, taxes)
+	}
+}
+
+func TestTaxesFindByName(t *testing.T) {
+	c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"taxes":[{"id":1,"name":"IVA23","value":23},{"id":2,"name":"Isento","value":0}]}`))
+	})
+	ctx := context.Background()
+
+	tax, err := c.Taxes.FindByName(ctx, "IVA23")
+	if err != nil || tax == nil || tax.ID != 1 {
+		t.Fatalf("FindByName hit: %v %+v", err, tax)
+	}
+
+	_, err = c.Taxes.FindByName(ctx, "NOPE")
+	if !errors.Is(err, ErrTaxNotFound) {
+		t.Fatalf("FindByName miss: want ErrTaxNotFound, got %v", err)
 	}
 }
 
