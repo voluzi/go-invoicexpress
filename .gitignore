@@ -1,0 +1,16 @@
+# Binaries
+*.exe
+*.out
+/bin/
+
+# Go workspace
+go.work
+go.work.sum
+
+# Test output
+*.test
+coverage.out
+
+# Editors
+/.idea/
+/.vscode/
