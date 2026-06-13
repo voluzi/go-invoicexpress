@@ -1,185 +1,125 @@
 # go-invoicexpress
 
-A Go client library for the [InvoiceXpress API v2](https://invoicexpress.com/api/documentation).
+[![CI](https://github.com/voluzi/go-invoicexpress/actions/workflows/ci.yml/badge.svg)](https://github.com/voluzi/go-invoicexpress/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/voluzi/go-invoicexpress.svg)](https://pkg.go.dev/github.com/voluzi/go-invoicexpress)
 
-## Installation
+A Go client for the [InvoiceXpress API v2](https://invoicexpress.com/api/documentation) — the Portuguese certified invoicing platform.
+
+- Invoices, invoice-receipts, credit/debit notes, estimates, guides
+- Clients, items, sequences, taxes, SAF-T export, accounts
+- Exact decimal money (no float rounding), typed errors, client-side validation
+- Automatic retries with backoff + `Retry-After`, optional client-side rate limiting
+- Zero third-party dependencies
+
+## Install
 
 ```bash
 go get github.com/voluzi/go-invoicexpress
 ```
 
-## Quick Start
+## Quick start
 
 ```go
-import "github.com/voluzi/go-invoicexpress"
+import ix "github.com/voluzi/go-invoicexpress"
 
-client := invoicexpress.NewClient("your-account-name", "your-api-key")
-```
-
-## Usage
-
-### Invoices
-
-```go
+client := ix.NewClient("my-account", os.Getenv("INVOICEXPRESS_API_KEY"))
 ctx := context.Background()
 
-// Create an invoice
-inv, err := client.Invoices.Create(ctx, invoicexpress.DocumentTypeInvoice, &invoicexpress.InvoiceCreateRequest{
-    Date:    invoicexpress.NewDate(time.Now()),
-    DueDate: invoicexpress.NewDate(time.Now().AddDate(0, 0, 30)),
-    Client: invoicexpress.ClientRef{
-        Name: "Acme Corp",
-        Code: "ACME",
-    },
-    Items: []invoicexpress.ItemRef{
-        {Name: "Consulting", UnitPrice: 100, Quantity: 8, Tax: &invoicexpress.TaxRef{Name: "IVA23"}},
-    },
+// Issue a finalized invoice-receipt (fatura-recibo) in one call.
+inv, err := client.Invoices.CreateAndFinalize(ctx, ix.DocumentTypeInvoiceReceipt, &ix.InvoiceCreateRequest{
+    Date:   ix.NewDate(time.Now()),
+    Client: ix.ClientRef{Name: "ACME, Lda", FiscalID: "500000000", Email: "geral@acme.pt"},
+    Items: []ix.ItemRef{{
+        Name:      "Plano Pro (mensal)",
+        UnitPrice: ix.NewDecimal("29.00"),
+        Quantity:  ix.NewDecimal("1"),
+        Tax:       &ix.TaxRef{Name: "IVA23"},
+    }},
 })
-
-// Finalize
-inv, err = client.Invoices.ChangeState(ctx, invoicexpress.DocumentTypeInvoice, inv.ID, invoicexpress.StateFinalized, "")
-
-// Send by email
-err = client.Invoices.SendByEmail(ctx, invoicexpress.DocumentTypeInvoice, inv.ID, &invoicexpress.EmailRequest{
-    Client:  invoicexpress.EmailClientRef{Email: "billing@acme.com"},
-    Subject: "Your invoice",
-    Body:    "Please find your invoice attached.",
-})
-
-// Get PDF URL (polls until ready)
-pdfURL, err := client.Invoices.GeneratePDF(ctx, inv.ID, 2*time.Second)
-
-// List with pagination
-invoices, pageInfo, err := client.Invoices.List(ctx, invoicexpress.DocumentTypeInvoice, &invoicexpress.ListOptions{
-    Page:    1,
-    PerPage: 25,
-})
-
-// Get QR code
-qr, err := client.Invoices.GetQRCode(ctx, inv.ID)
-
-// Partial payment
-payment, err := client.Invoices.CreatePartialPayment(ctx, inv.ID, &invoicexpress.PartialPaymentRequest{
-    PaymentMechanism: invoicexpress.PaymentMechanismTransfer,
-    Amount:           500.00,
-    PaymentDate:      invoicexpress.NewDate(time.Now()),
-})
-```
-
-### Document Types
-
-**Invoices:**
-- `DocumentTypeInvoice` — `invoices`
-- `DocumentTypeSimplified` — `simplified_invoices`
-- `DocumentTypeInvoiceReceipt` — `invoice_receipts`
-- `DocumentTypeCreditNote` — `credit_notes`
-- `DocumentTypeDebitNote` — `debit_notes`
-
-**Estimates:**
-- `DocumentTypeQuote` — `quotes`
-- `DocumentTypeProforma` — `proformas`
-- `DocumentTypeFeesNote` — `fees_notes`
-
-**Guides:**
-- `DocumentTypeShipping` — `shippings`
-- `DocumentTypeTransport` — `transports`
-- `DocumentTypeDevolution` — `devolutions`
-
-### Clients (Customers)
-
-```go
-// Create
-customer, err := client.Clients.Create(ctx, &invoicexpress.ClientCreateRequest{
-    Name:    "Acme Corp",
-    Code:    "ACME",
-    Email:   "billing@acme.com",
-    Country: "Portugal",
-})
-
-// Find by name or code
-customers, err := client.Clients.FindByName(ctx, "Acme")
-customer, err := client.Clients.FindByCode(ctx, "ACME")
-
-// List all (auto-paginated)
-all, err := client.Clients.ListAll(ctx)
-```
-
-### Items
-
-```go
-item, err := client.Items.Create(ctx, &invoicexpress.ItemCreateRequest{
-    Name:      "Consulting",
-    UnitPrice: 100.00,
-    Unit:      "hour",
-    Tax:       &invoicexpress.TaxRef{Name: "IVA23"},
-})
-```
-
-### Taxes & Sequences
-
-```go
-taxes, err := client.Taxes.List(ctx)
-sequences, err := client.Sequences.List(ctx)
-err = client.Sequences.SetCurrent(ctx, sequenceID)
-```
-
-### SAF-T Export
-
-```go
-// Polls until the export is ready
-result, err := client.SAFT.Export(ctx, 3, 2024, 3*time.Second) // March 2024
-fmt.Println(result.XMLURL)
-```
-
-### Estimates
-
-```go
-quote, err := client.Estimates.Create(ctx, invoicexpress.DocumentTypeQuote, &invoicexpress.InvoiceCreateRequest{...})
-```
-
-### Guides
-
-```go
-shipping, err := client.Guides.Create(ctx, invoicexpress.DocumentTypeShipping, &invoicexpress.GuideCreateRequest{
-    Date:        invoicexpress.NewDate(time.Now()),
-    Client:      invoicexpress.ClientRef{Name: "Acme Corp", Code: "ACME"},
-    Items:       []invoicexpress.ItemRef{{Name: "Goods", UnitPrice: 100, Quantity: 1}},
-    AddressFrom: &invoicexpress.AddressInfo{City: "Lisbon", Country: "Portugal"},
-    AddressTo:   &invoicexpress.AddressInfo{City: "Porto", Country: "Portugal"},
-})
-```
-
-## Error Handling
-
-```go
-inv, err := client.Invoices.Get(ctx, invoicexpress.DocumentTypeInvoice, 12345)
 if err != nil {
-    if invoicexpress.IsNotFound(err) {
-        // 404 — document doesn't exist
+    log.Fatal(err)
+}
+
+pdfURL, _ := client.Invoices.GeneratePDF(ctx, inv.ID, 2*time.Second)
+_ = client.Invoices.SendByEmail(ctx, ix.DocumentTypeInvoiceReceipt, inv.ID, &ix.EmailRequest{
+    Client:  ix.EmailClientRef{Email: "geral@acme.pt"},
+    Subject: "A sua fatura",
+    Body:    "Obrigado!",
+})
+```
+
+## Configuration
+
+```go
+client := ix.NewClient("my-account", "api-key",
+    ix.WithTimeout(20*time.Second),
+    ix.WithRetry(ix.RetryConfig{MaxAttempts: 5, BaseDelay: 500*time.Millisecond, MaxDelay: 10*time.Second}),
+    ix.WithRateLimit(10, 5),      // ≤10 req/s, burst 5 — stays under server limits
+    ix.WithUserAgent("acme/1.0"),
+    ix.WithHTTPClient(myHTTPClient),
+)
+```
+
+Retries apply automatically to HTTP 429 (always) and 5xx (idempotent methods),
+with exponential backoff + jitter, honoring the `Retry-After` header. Pass
+`WithRetry(ix.RetryConfig{MaxAttempts: 1})` to disable.
+
+## Money
+
+All amounts use the `Decimal` type so values are sent and stored exactly — never
+as a `float64`. This matters when mirroring an upstream charge (e.g. a Stripe
+payment) onto a legal invoice.
+
+```go
+ix.NewDecimal("29.99")          // exact, recommended
+ix.DecimalFromFloat(29.99, 2)   // when you only have a float
+amount.String()                 // "29.99"
+amount.Float64()                // for display/aggregation only
+```
+
+`Decimal` decodes from either a JSON string (`"29.99"`) or number (`29.99`).
+Tax *rates* (percentages) remain `float64`.
+
+## Errors
+
+```go
+inv, err := client.Invoices.Get(ctx, ix.DocumentTypeInvoice, id)
+switch {
+case ix.IsNotFound(err):
+    // 404
+case ix.IsUnprocessable(err):
+    if e, ok := ix.AsAPIError(err); ok {
+        log.Printf("validation: %v", e.Errors) // parsed field messages
     }
-    if invoicexpress.IsUnprocessable(err) {
-        // 422 — validation error
-    }
-    // Other errors
-    var apiErr *invoicexpress.APIError
-    if errors.As(err, &apiErr) {
-        fmt.Printf("API error %d: %s\n", apiErr.StatusCode, apiErr.Body)
-    }
+case ix.IsRateLimited(err):
+    // 429 after retries exhausted
 }
 ```
 
-## Dates
+Helpers: `IsNotFound`, `IsUnprocessable`, `IsRateLimited`, `IsUnauthorized`,
+`IsConflict`, `AsAPIError`, and `IsValidation` for client-side validation errors.
 
-Dates in the InvoiceXpress API are in `dd/mm/yyyy` format. The library handles this transparently via the `Date` type:
+## Validation
 
-```go
-// Create a Date from time.Time
-d := invoicexpress.NewDate(time.Now())
+`Invoices.Create` / `CreateAndFinalize` validate required fields before any
+network call. You can also call `req.Validate()` yourself.
 
-// Dates unmarshal automatically from API responses
-fmt.Println(inv.Date.Time) // time.Time
-```
+## Mocking
+
+Each service has an interface (`ix.InvoicesAPI`, `ix.ClientsAPI`, …) so you can
+fake the client in your own tests without the network.
+
+## Documents
+
+| Group | Types |
+|-------|-------|
+| Invoices | `invoices`, `simplified_invoices`, `invoice_receipts`, `credit_notes`, `debit_notes` |
+| Estimates | `quotes`, `proformas`, `fees_notes` |
+| Guides | `shippings`, `transports`, `devolutions` |
+
+Use the `DocumentType*` constants. A draft document has no fiscal value until
+finalized (`ChangeState(..., StateFinalized, "")`, or `CreateAndFinalize`).
 
 ## License
 
-MIT
+[MIT](LICENSE)
