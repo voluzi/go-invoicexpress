@@ -198,6 +198,43 @@ func TestParseRetryAfter(t *testing.T) {
 	}
 }
 
+func TestOptionsApply(t *testing.T) {
+	custom := &http.Client{Timeout: time.Second}
+	c := NewClient("acct", "k",
+		WithBaseURL("https://x.test/"),
+		WithHTTPClient(custom),
+		WithTimeout(5*time.Second),
+		WithRetry(RetryConfig{MaxAttempts: 1}),
+		WithRateLimit(50, 5),
+	)
+	if c.baseURL != "https://x.test" {
+		t.Errorf("baseURL trailing slash not trimmed: %q", c.baseURL)
+	}
+	if c.httpClient != custom {
+		t.Error("WithHTTPClient not applied")
+	}
+	if c.httpClient.Timeout != 5*time.Second {
+		t.Errorf("WithTimeout not applied: %v", c.httpClient.Timeout)
+	}
+	if c.retry.MaxAttempts != 1 {
+		t.Errorf("WithRetry not applied: %d", c.retry.MaxAttempts)
+	}
+	if c.limiter == nil {
+		t.Error("WithRateLimit not applied")
+	}
+}
+
+func TestNetworkErrorIsReturned(t *testing.T) {
+	c := NewClient("acct", "k",
+		WithBaseURL("http://127.0.0.1:1"), // connection refused
+		WithRetry(RetryConfig{MaxAttempts: 2, BaseDelay: time.Millisecond, MaxDelay: time.Millisecond}),
+	)
+	err := c.do(context.Background(), http.MethodGet, "/x.json", nil, nil, nil)
+	if err == nil {
+		t.Fatal("expected a network error")
+	}
+}
+
 func TestRateLimiterPacesRequests(t *testing.T) {
 	rl := newRateLimiter(100, 1) // 1 burst, 100/s refill
 	ctx := context.Background()
