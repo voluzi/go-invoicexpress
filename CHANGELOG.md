@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- Repository hygiene for open-source: `SECURITY.md` (private vulnerability
+  reporting), Dependabot for GitHub Actions + Go modules, and issue/PR templates.
 - `ValidPortugueseNIF` and `Taxes.FindByName` — guards against InvoiceXpress's
   silent fallbacks (a bad NIF degrades to "Consumidor Final"; an unknown tax
   name applies the default rate, neither erroring).

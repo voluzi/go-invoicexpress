@@ -1,0 +1,19 @@
+name: Feature request
+description: Suggest an endpoint, field, or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's missing or could be better?
+      description: Describe the use case. If it's an InvoiceXpress endpoint/field, link the API docs.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API
+      description: How might the Go API look? (optional)
+      render: go
+    validations:
+      required: false
