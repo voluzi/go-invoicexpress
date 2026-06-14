@@ -19,17 +19,17 @@ type estimateWrapper struct {
 
 // estimateResponse is the JSON response for a single estimate.
 type estimateResponse struct {
-	Estimate Invoice `json:"estimate"`
+	Estimate Estimate `json:"estimate"`
 }
 
 // estimateListResponse is the JSON response for a list of estimates.
 type estimateListResponse struct {
-	Estimates  []Invoice `json:"estimates"`
-	Pagination PageInfo  `json:"pagination"`
+	Estimates  []Estimate `json:"estimates"`
+	Pagination PageInfo   `json:"pagination"`
 }
 
 // Create creates a new estimate document.
-func (s *EstimatesService) Create(ctx context.Context, docType DocumentType, req *InvoiceCreateRequest) (*Invoice, error) {
+func (s *EstimatesService) Create(ctx context.Context, docType DocumentType, req *InvoiceCreateRequest) (*Estimate, error) {
 	path := fmt.Sprintf("/%s.json", docType)
 	var resp estimateResponse
 	if err := s.client.do(ctx, http.MethodPost, path, nil, estimateWrapper{Estimate: req}, &resp); err != nil {
@@ -39,7 +39,7 @@ func (s *EstimatesService) Create(ctx context.Context, docType DocumentType, req
 }
 
 // Get retrieves an estimate document by ID.
-func (s *EstimatesService) Get(ctx context.Context, docType DocumentType, id int64) (*Invoice, error) {
+func (s *EstimatesService) Get(ctx context.Context, docType DocumentType, id int64) (*Estimate, error) {
 	path := fmt.Sprintf("/%s/%d.json", docType, id)
 	var resp estimateResponse
 	if err := s.client.do(ctx, http.MethodGet, path, nil, nil, &resp); err != nil {
@@ -49,7 +49,7 @@ func (s *EstimatesService) Get(ctx context.Context, docType DocumentType, id int
 }
 
 // List returns a paginated list of estimate documents.
-func (s *EstimatesService) List(ctx context.Context, docType DocumentType, opts *ListOptions) ([]Invoice, *PageInfo, error) {
+func (s *EstimatesService) List(ctx context.Context, docType DocumentType, opts *ListOptions) ([]Estimate, *PageInfo, error) {
 	path := fmt.Sprintf("/%s.json", docType)
 	var resp estimateListResponse
 	if err := s.client.do(ctx, http.MethodGet, path, paginationParams(opts), nil, &resp); err != nil {
@@ -68,7 +68,7 @@ func (s *EstimatesService) Update(ctx context.Context, docType DocumentType, id 
 }
 
 // ChangeState transitions an estimate document to a new state.
-func (s *EstimatesService) ChangeState(ctx context.Context, docType DocumentType, id int64, state DocumentState, message string) (*Invoice, error) {
+func (s *EstimatesService) ChangeState(ctx context.Context, docType DocumentType, id int64, state DocumentState, message string) (*Estimate, error) {
 	path := fmt.Sprintf("/%s/%d/change-state.json", docType, id)
 	body := struct {
 		Estimate ChangeStateRequest `json:"estimate"`
