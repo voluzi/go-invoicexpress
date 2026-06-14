@@ -57,7 +57,7 @@ func (r *InvoiceCreateRequest) Validate() error {
 		if strings.TrimSpace(item.Name) == "" {
 			issues = append(issues, fmt.Sprintf("items[%d].name is required", i))
 		}
-		if item.UnitPrice.IsZero() && item.Quantity.IsZero() {
+		if item.UnitPrice.IsZero() || item.Quantity.IsZero() {
 			issues = append(issues, fmt.Sprintf("items[%d] needs a unit_price and quantity", i))
 		}
 	}

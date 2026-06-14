@@ -28,8 +28,12 @@ type guideListResponse struct {
 	Pagination PageInfo `json:"pagination"`
 }
 
-// Create creates a new guide document.
+// Create creates a new guide document. The request is validated client-side
+// before any network call.
 func (s *GuidesService) Create(ctx context.Context, docType DocumentType, req *GuideCreateRequest) (*Guide, error) {
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
 	path := fmt.Sprintf("/%s.json", docType)
 	var resp guideResponse
 	if err := s.client.do(ctx, http.MethodPost, path, nil, guideWrapper{Guide: req}, &resp); err != nil {

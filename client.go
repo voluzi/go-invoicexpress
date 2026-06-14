@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -14,6 +15,32 @@ import (
 	"sync"
 	"time"
 )
+
+// redactAPIKey strips the api_key value from any *url.Error in the chain. The
+// api_key is sent as a query parameter, and net/http transport errors embed the
+// full request URL in their message — without this, the key could leak into a
+// caller's logs.
+func redactAPIKey(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		ue.URL = redactAPIKeyInURL(ue.URL)
+	}
+	return err
+}
+
+func redactAPIKeyInURL(raw string) string {
+	u, parseErr := url.Parse(raw)
+	if parseErr != nil {
+		return raw
+	}
+	q := u.Query()
+	if q.Get("api_key") == "" {
+		return raw
+	}
+	q.Set("api_key", "REDACTED")
+	u.RawQuery = q.Encode()
+	return u.String()
+}
 
 const (
 	// Version is the library version, surfaced in the default User-Agent.
@@ -198,7 +225,7 @@ func (c *Client) doWithStatus(ctx context.Context, method, path string, params u
 		}
 		req, err := http.NewRequestWithContext(ctx, method, fullURL, reqBody)
 		if err != nil {
-			return 0, fmt.Errorf("invoicexpress: create request: %w", err)
+			return 0, fmt.Errorf("invoicexpress: create request: %w", redactAPIKey(err))
 		}
 		if reqBytes != nil {
 			req.Header.Set("Content-Type", "application/json; charset=utf-8")
@@ -208,7 +235,7 @@ func (c *Client) doWithStatus(ctx context.Context, method, path string, params u
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
-			lastErr = fmt.Errorf("invoicexpress: do request: %w", err)
+			lastErr = fmt.Errorf("invoicexpress: do request: %w", redactAPIKey(err))
 			if idempotent && c.shouldRetry(attempt) {
 				if werr := c.backoff(ctx, attempt, nil); werr != nil {
 					return 0, werr

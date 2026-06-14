@@ -47,8 +47,12 @@ func (s *ClientsService) Get(ctx context.Context, id int64) (*Customer, error) {
 	return &resp.Client, nil
 }
 
-// Create creates a new client.
+// Create creates a new client. The request is validated client-side before any
+// network call.
 func (s *ClientsService) Create(ctx context.Context, req *ClientCreateRequest) (*Customer, error) {
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
 	var resp clientResponse
 	if err := s.client.do(ctx, http.MethodPost, "/clients.json", nil, clientWrapper{Client: req}, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: clients.create: %w", err)

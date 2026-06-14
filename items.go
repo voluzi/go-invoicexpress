@@ -46,8 +46,12 @@ func (s *ItemsService) Get(ctx context.Context, id int64) (*Item, error) {
 	return &resp.Item, nil
 }
 
-// Create creates a new item.
+// Create creates a new item. The request is validated client-side before any
+// network call.
 func (s *ItemsService) Create(ctx context.Context, req *ItemCreateRequest) (*Item, error) {
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
 	var resp itemResponse
 	if err := s.client.do(ctx, http.MethodPost, "/items.json", nil, itemWrapper{Item: req}, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: items.create: %w", err)

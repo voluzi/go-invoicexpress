@@ -90,7 +90,7 @@ func TestInvoicesRemainingMethods(t *testing.T) {
 	if _, err := c.Invoices.CreatePartialPayment(ctx, 1, &PartialPaymentRequest{Amount: NewDecimal("10"), PaymentMechanism: PaymentMechanismMBWay, PaymentDate: NewDate(time.Now())}); err != nil {
 		t.Errorf("CreatePartialPayment: %v", err)
 	}
-	if err := c.Invoices.CancelPartialPayment(ctx, 1, 2); err != nil {
+	if err := c.Invoices.CancelPartialPayment(ctx, 1, "correção"); err != nil {
 		t.Errorf("CancelPartialPayment: %v", err)
 	}
 	if _, err := c.Invoices.GetQRCode(ctx, 1); err != nil {

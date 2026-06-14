@@ -28,8 +28,12 @@ type estimateListResponse struct {
 	Pagination PageInfo   `json:"pagination"`
 }
 
-// Create creates a new estimate document.
+// Create creates a new estimate document. The request is validated client-side
+// before any network call.
 func (s *EstimatesService) Create(ctx context.Context, docType DocumentType, req *InvoiceCreateRequest) (*Estimate, error) {
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
 	path := fmt.Sprintf("/%s.json", docType)
 	var resp estimateResponse
 	if err := s.client.do(ctx, http.MethodPost, path, nil, estimateWrapper{Estimate: req}, &resp); err != nil {

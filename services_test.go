@@ -167,7 +167,9 @@ func TestEstimatesCreateWrapsAsEstimate(t *testing.T) {
 		w.Write([]byte(`{"estimate":{"id":2}}`))
 	})
 	est, err := c.Estimates.Create(context.Background(), DocumentTypeQuote, &InvoiceCreateRequest{
+		Date:   NewDate(time.Now()),
 		Client: ClientRef{Name: "X"},
+		Items:  []ItemRef{{Name: "X", UnitPrice: NewDecimal("1"), Quantity: NewDecimal("1")}},
 	})
 	if err != nil || est.ID != 2 {
 		t.Fatalf("estimates.create: %v %+v", err, est)
@@ -185,7 +187,9 @@ func TestGuidesCreateWrapsAsGuide(t *testing.T) {
 		w.Write([]byte(`{"guide":{"id":4}}`))
 	})
 	g, err := c.Guides.Create(context.Background(), DocumentTypeTransport, &GuideCreateRequest{
+		Date:   NewDate(time.Now()),
 		Client: ClientRef{Name: "X"},
+		Items:  []ItemRef{{Name: "X", UnitPrice: NewDecimal("1"), Quantity: NewDecimal("1")}},
 	})
 	if err != nil || g.ID != 4 {
 		t.Fatalf("guides.create: %v %+v", err, g)

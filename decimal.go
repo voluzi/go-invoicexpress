@@ -2,6 +2,7 @@ package invoicexpress
 
 import (
 	"bytes"
+	"encoding/json"
 	"strconv"
 	"strings"
 )
@@ -53,16 +54,20 @@ func (d Decimal) Float64() (float64, error) {
 	return strconv.ParseFloat(d.s, 64)
 }
 
-// MarshalJSON emits the value as a JSON string.
+// MarshalJSON emits the value as a JSON string. It uses json.Marshal so any
+// quotes/backslashes/control characters are escaped — a raw concatenation would
+// produce invalid JSON for an unusual value.
 func (d Decimal) MarshalJSON() ([]byte, error) {
 	s := d.s
 	if s == "" {
 		s = "0"
 	}
-	return []byte(`"` + s + `"`), nil
+	return json.Marshal(s)
 }
 
-// UnmarshalJSON accepts either a JSON string or a JSON number.
+// UnmarshalJSON accepts either a JSON string or a JSON number. The string case
+// is decoded via json.Unmarshal so it handles escaping and rejects malformed
+// input with an error rather than panicking.
 func (d *Decimal) UnmarshalJSON(data []byte) error {
 	data = bytes.TrimSpace(data)
 	if len(data) == 0 || string(data) == "null" {
@@ -70,7 +75,11 @@ func (d *Decimal) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 	if data[0] == '"' {
-		d.s = strings.TrimSpace(string(data[1 : len(data)-1]))
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		d.s = strings.TrimSpace(s)
 		return nil
 	}
 	d.s = string(data)

@@ -23,7 +23,7 @@ type InvoicesAPI interface {
 	SendByEmail(ctx context.Context, docType DocumentType, id int64, req *EmailRequest) error
 	GeneratePDF(ctx context.Context, id int64, pollInterval time.Duration) (string, error)
 	CreatePartialPayment(ctx context.Context, id int64, req *PartialPaymentRequest) (*PartialPayment, error)
-	CancelPartialPayment(ctx context.Context, documentID, paymentID int64) error
+	CancelPartialPayment(ctx context.Context, receiptID int64, message string) error
 	GetQRCode(ctx context.Context, id int64) (*QRCode, error)
 }
 

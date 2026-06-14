@@ -38,6 +38,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `buildURL` no longer mutates the caller's `url.Values`.
 - Removed dead code.
 
+### Fixed (review round)
+- **Security:** the `api_key` (a query parameter) could leak into a caller's logs
+  via `*url.Error` on transport failures — it's now redacted in returned errors.
+- `Decimal.MarshalJSON` now escapes via `json.Marshal` (a raw value with quotes
+  or backslashes previously produced invalid JSON).
+- `Decimal.UnmarshalJSON` no longer panics on malformed input (e.g. a lone `"`);
+  the string branch decodes via `json.Unmarshal`.
+- `Validate()` is now called by `Estimates`/`Guides`/`Clients`/`Items` `Create`
+  (previously only `Invoices.Create`), matching the documented contract.
+- Item validation now rejects a line item missing **either** unit price or
+  quantity (was `&&`, only caught both-missing).
+- **`CancelPartialPayment` was using the wrong endpoint.** Corrected to
+  `PUT /receipts/{id}/change-state.json` with the required
+  `{"receipt":{"state":"canceled","message":...}}` body. Signature changed to
+  `CancelPartialPayment(ctx, receiptID int64, message string)`.
+
+### Documented
+- A zero `Date` on an `omitempty` field marshals to JSON `null` (omitempty does
+  not apply to structs); InvoiceXpress treats it as an absent optional date.
+
 ## [0.0.0] - initial
 - Initial implementation: invoices, estimates, guides, clients, items,
   sequences, taxes, SAF-T, accounts; `Date` type; async PDF/SAF-T polling.

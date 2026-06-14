@@ -179,10 +179,20 @@ func (s *InvoicesService) CreatePartialPayment(ctx context.Context, id int64, re
 	return &resp.PartialPayment, nil
 }
 
-// CancelPartialPayment cancels a partial payment.
-func (s *InvoicesService) CancelPartialPayment(ctx context.Context, documentID, paymentID int64) error {
-	path := fmt.Sprintf("/documents/%d/partial_payments/%d.json", documentID, paymentID)
-	if err := s.client.do(ctx, http.MethodPut, path, nil, nil, nil); err != nil {
+// CancelPartialPayment cancels a partial-payment receipt by its receipt ID
+// (the ID returned by CreatePartialPayment). InvoiceXpress requires a
+// non-empty cancellation message.
+func (s *InvoicesService) CancelPartialPayment(ctx context.Context, receiptID int64, message string) error {
+	path := fmt.Sprintf("/receipts/%d/change-state.json", receiptID)
+	body := struct {
+		Receipt struct {
+			State   string `json:"state"`
+			Message string `json:"message"`
+		} `json:"receipt"`
+	}{}
+	body.Receipt.State = string(StateCanceled)
+	body.Receipt.Message = message
+	if err := s.client.do(ctx, http.MethodPut, path, nil, body, nil); err != nil {
 		return fmt.Errorf("invoicexpress: invoices.cancel-partial-payment: %w", err)
 	}
 	return nil

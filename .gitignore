@@ -10,3 +10,7 @@ go.work.sum
 # Test output
 *.test
 coverage.out
+
+# Editors
+/.idea/
+/.vscode/
