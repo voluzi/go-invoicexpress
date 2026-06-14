@@ -71,8 +71,12 @@ func (s *EstimatesService) Update(ctx context.Context, docType DocumentType, id 
 	return nil
 }
 
-// ChangeState transitions an estimate document to a new state.
+// ChangeState transitions an estimate document to a new state. Message is
+// required for the canceled state (enforced client-side).
 func (s *EstimatesService) ChangeState(ctx context.Context, docType DocumentType, id int64, state DocumentState, message string) (*Estimate, error) {
+	if err := requireCancelMessage(state, message); err != nil {
+		return nil, err
+	}
 	path := fmt.Sprintf("/%s/%d/change-state.json", docType, id)
 	body := struct {
 		Estimate ChangeStateRequest `json:"estimate"`

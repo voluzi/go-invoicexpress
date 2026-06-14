@@ -28,6 +28,15 @@ func redactAPIKey(err error) error {
 	return err
 }
 
+// redactAPIKeyBytes removes the literal api_key value from a response body,
+// in case the API or an intermediary proxy echoes the request URL.
+func redactAPIKeyBytes(body []byte, key string) []byte {
+	if key == "" {
+		return body
+	}
+	return bytes.ReplaceAll(body, []byte(key), []byte("REDACTED"))
+}
+
 func redactAPIKeyInURL(raw string) string {
 	u, parseErr := url.Parse(raw)
 	if parseErr != nil {
@@ -263,7 +272,7 @@ func (c *Client) doWithStatus(ctx context.Context, method, path string, params u
 		}
 
 		if status >= 400 {
-			apiErr := newAPIError(status, resp.Status, respBody)
+			apiErr := newAPIError(status, resp.Status, redactAPIKeyBytes(respBody, c.apiKey))
 			if c.retryableStatus(status, idempotent) && c.shouldRetry(attempt) {
 				if werr := c.backoff(ctx, attempt, resp); werr != nil {
 					return status, werr

@@ -71,8 +71,12 @@ func (s *GuidesService) Update(ctx context.Context, docType DocumentType, id int
 	return nil
 }
 
-// ChangeState transitions a guide document to a new state.
+// ChangeState transitions a guide document to a new state. Message is required
+// for the canceled state (enforced client-side).
 func (s *GuidesService) ChangeState(ctx context.Context, docType DocumentType, id int64, state DocumentState, message string) (*Guide, error) {
+	if err := requireCancelMessage(state, message); err != nil {
+		return nil, err
+	}
 	path := fmt.Sprintf("/%s/%d/change-state.json", docType, id)
 	body := struct {
 		Guide ChangeStateRequest `json:"guide"`

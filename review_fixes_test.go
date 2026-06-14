@@ -104,6 +104,98 @@ func TestServiceCreateValidatesBeforeNetwork(t *testing.T) {
 	}
 }
 
+func TestDecimalUnmarshalRejectsNonNumeric(t *testing.T) {
+	for _, in := range []string{`"not-a-number"`, `true`, `false`, `{}`, `[]`, `"abc"`, `"1e3"`} {
+		var d Decimal
+		if err := json.Unmarshal([]byte(in), &d); err == nil {
+			t.Errorf("Decimal accepted invalid input %s (stored %q)", in, d.String())
+		}
+	}
+	for _, in := range []string{`"50.00"`, `61.5`, `0`, `-1.5`, `null`, `""`} {
+		var d Decimal
+		if err := json.Unmarshal([]byte(in), &d); err != nil {
+			t.Errorf("Decimal rejected valid input %s: %v", in, err)
+		}
+	}
+}
+
+func TestParseDecimalAndValid(t *testing.T) {
+	for _, ok := range []string{"29.99", "0", "-1.50", "", "  12.30  "} {
+		if _, err := ParseDecimal(ok); err != nil {
+			t.Errorf("ParseDecimal(%q) unexpected error: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"abc", "1e3", "1.2.3", "+5", "NaN", "{}"} {
+		if _, err := ParseDecimal(bad); err == nil {
+			t.Errorf("ParseDecimal(%q) should error", bad)
+		}
+	}
+	if NewDecimal("oops").Valid() {
+		t.Error("Valid() should be false for non-numeric")
+	}
+	if !NewDecimal("12.30").Valid() {
+		t.Error("Valid() should be true for 12.30")
+	}
+}
+
+func TestCancelPartialPaymentRequiresMessage(t *testing.T) {
+	hit := false
+	c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+		_, _ = w.Write([]byte("{}"))
+	})
+	err := c.Invoices.CancelPartialPayment(context.Background(), 42, "   ")
+	if !IsValidation(err) {
+		t.Fatalf("want ValidationError for empty message, got %v", err)
+	}
+	if hit {
+		t.Error("must not call the API to cancel without a message")
+	}
+}
+
+func TestChangeStateCanceledRequiresMessage(t *testing.T) {
+	hit := false
+	c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+		_, _ = w.Write([]byte(`{"invoice":{"id":1}}`))
+	})
+	ctx := context.Background()
+	if _, err := c.Invoices.ChangeState(ctx, DocumentTypeInvoice, 1, StateCanceled, ""); !IsValidation(err) {
+		t.Fatalf("cancel without message: want ValidationError, got %v", err)
+	}
+	if hit {
+		t.Error("must not call the API to cancel without a message")
+	}
+	// A non-cancel transition without a message is fine.
+	if _, err := c.Invoices.ChangeState(ctx, DocumentTypeInvoice, 1, StateFinalized, ""); err != nil {
+		t.Errorf("finalize without message should succeed: %v", err)
+	}
+}
+
+func TestErrorBodyRedactsAPIKey(t *testing.T) {
+	c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		// A misbehaving proxy might echo the full request URL (incl. api_key).
+		_, _ = w.Write([]byte(`{"error":"bad request to ` + r.URL.String() + `"}`))
+	})
+	err := c.do(context.Background(), http.MethodGet, "/x.json", nil, nil, nil)
+	if err == nil {
+		t.Fatal("expected an API error")
+	}
+	if strings.Contains(err.Error(), "test-key") {
+		t.Errorf("api_key leaked via error body: %v", err)
+	}
+}
+
+func TestItemValidationRequiresUnitPrice(t *testing.T) {
+	if err := (&ItemCreateRequest{Name: "X"}).Validate(); err == nil {
+		t.Error("item without unit_price should fail validation")
+	}
+	if err := (&ItemCreateRequest{Name: "X", UnitPrice: NewDecimal("10")}).Validate(); err != nil {
+		t.Errorf("item with name + unit_price should pass: %v", err)
+	}
+}
+
 func TestItemValidationRequiresBothPriceAndQuantity(t *testing.T) {
 	withItems := func(items []ItemRef) *InvoiceCreateRequest {
 		return &InvoiceCreateRequest{

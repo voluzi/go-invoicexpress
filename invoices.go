@@ -88,8 +88,11 @@ func (s *InvoicesService) Update(ctx context.Context, docType DocumentType, id i
 }
 
 // ChangeState transitions a document to a new state.
-// Message is required for canceled state.
+// Message is required for the canceled state (enforced client-side).
 func (s *InvoicesService) ChangeState(ctx context.Context, docType DocumentType, id int64, state DocumentState, message string) (*Invoice, error) {
+	if err := requireCancelMessage(state, message); err != nil {
+		return nil, err
+	}
 	path := fmt.Sprintf("/%s/%d/change-state.json", docType, id)
 	body := struct {
 		Invoice ChangeStateRequest `json:"invoice"`
@@ -183,6 +186,9 @@ func (s *InvoicesService) CreatePartialPayment(ctx context.Context, id int64, re
 // (the ID returned by CreatePartialPayment). InvoiceXpress requires a
 // non-empty cancellation message.
 func (s *InvoicesService) CancelPartialPayment(ctx context.Context, receiptID int64, message string) error {
+	if err := requireCancelMessage(StateCanceled, message); err != nil {
+		return err
+	}
 	path := fmt.Sprintf("/receipts/%d/change-state.json", receiptID)
 	body := struct {
 		Receipt struct {

@@ -54,9 +54,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `{"receipt":{"state":"canceled","message":...}}` body. Signature changed to
   `CancelPartialPayment(ctx, receiptID int64, message string)`.
 
+### Fixed (review round 2)
+- `Decimal.UnmarshalJSON` now rejects non-numeric input — booleans, objects,
+  arrays, and non-numeric strings (e.g. `"not-a-number"`) error instead of being
+  silently stored. Added `ParseDecimal(string) (Decimal, error)` and `Valid()`.
+- `CancelPartialPayment` and `ChangeState` now enforce a non-empty message
+  client-side when canceling (the API requires a reason).
+- `ItemCreateRequest.Validate` now requires `unit_price` (per the API), not just
+  name.
+- API error bodies are scrubbed of the `api_key` before being placed in
+  `APIError.Body`, in case a proxy echoes the request URL.
+
 ### Documented
 - A zero `Date` on an `omitempty` field marshals to JSON `null` (omitempty does
   not apply to structs); InvoiceXpress treats it as an absent optional date.
+- `Update` methods do not validate (pass-through for partial updates); only
+  `Create` validates client-side. Corrected the misleading doc comment.
 
 ## [0.0.0] - initial
 - Initial implementation: invoices, estimates, guides, clients, items,

@@ -6,10 +6,13 @@ import (
 	"strings"
 )
 
-// ValidationError is returned by request Validate() methods (and by Create/
-// Update before any network call) when required fields are missing. It lets
-// callers fail fast with a clear message instead of round-tripping to the API
-// for a 422.
+// ValidationError is returned by request Validate() methods and by the Create
+// methods (which call Validate before any network call) when required fields
+// are missing. It lets callers fail fast with a clear message instead of
+// round-tripping to the API for a 422.
+//
+// Update methods do NOT validate — they are a pass-through, since update
+// payloads may legitimately be partial. Call Validate yourself if you need it.
 type ValidationError struct {
 	Issues []string
 }
@@ -22,6 +25,16 @@ func (e *ValidationError) Error() string {
 func IsValidation(err error) bool {
 	var e *ValidationError
 	return errors.As(err, &e)
+}
+
+// requireCancelMessage returns a ValidationError when a cancellation is
+// requested without a message. InvoiceXpress requires a reason to cancel a
+// document or a partial-payment receipt.
+func requireCancelMessage(state DocumentState, message string) error {
+	if state == StateCanceled && strings.TrimSpace(message) == "" {
+		return &ValidationError{Issues: []string{"a message is required to cancel"}}
+	}
+	return nil
 }
 
 func validationError(issues ...string) error {
@@ -93,13 +106,19 @@ func (r *ClientCreateRequest) Validate() error {
 	return nil
 }
 
-// Validate checks the minimum fields required to create an item.
+// Validate checks the minimum fields required to create an item. The API
+// documents name, description and unit_price as required; we enforce name and
+// unit_price (description is left to the server, which is lenient in practice).
 func (r *ItemCreateRequest) Validate() error {
 	if r == nil {
 		return &ValidationError{Issues: []string{"request is nil"}}
 	}
+	var issues []string
 	if strings.TrimSpace(r.Name) == "" {
-		return validationError("name is required")
+		issues = append(issues, "name is required")
 	}
-	return nil
+	if r.UnitPrice.IsZero() {
+		issues = append(issues, "unit_price is required")
+	}
+	return validationError(issues...)
 }

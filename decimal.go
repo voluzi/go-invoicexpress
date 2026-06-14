@@ -3,9 +3,18 @@ package invoicexpress
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 )
+
+// decimalRe matches a plain decimal number: optional leading minus, digits,
+// optional fractional part. Scientific notation, NaN/Inf and a leading plus are
+// rejected — none are valid for a monetary amount.
+var decimalRe = regexp.MustCompile(`^-?[0-9]+(\.[0-9]+)?$`)
+
+func validDecimal(s string) bool { return decimalRe.MatchString(s) }
 
 // Decimal represents a monetary or quantity value as an exact decimal string,
 // avoiding float64 rounding error in a financial context (this library issues
@@ -18,8 +27,25 @@ type Decimal struct {
 }
 
 // NewDecimal builds a Decimal from its exact string representation, e.g.
-// NewDecimal("29.99"). Whitespace is trimmed.
+// NewDecimal("29.99"). Whitespace is trimmed. It does NOT validate the format —
+// use ParseDecimal for untrusted input, or check Valid afterwards.
 func NewDecimal(s string) Decimal { return Decimal{s: strings.TrimSpace(s)} }
+
+// ParseDecimal builds a Decimal from a string, returning an error if it is not
+// a valid plain decimal number. An empty string yields the zero value.
+func ParseDecimal(s string) (Decimal, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return Decimal{}, nil
+	}
+	if !validDecimal(s) {
+		return Decimal{}, fmt.Errorf("invoicexpress: invalid decimal %q", s)
+	}
+	return Decimal{s: s}, nil
+}
+
+// Valid reports whether the Decimal holds a syntactically valid decimal number.
+func (d Decimal) Valid() bool { return validDecimal(d.s) }
 
 // DecimalFromFloat builds a Decimal from a float64 fixed to places decimals
 // (use 2 for currency). Prefer NewDecimal when you already have an exact
@@ -65,23 +91,36 @@ func (d Decimal) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s)
 }
 
-// UnmarshalJSON accepts either a JSON string or a JSON number. The string case
-// is decoded via json.Unmarshal so it handles escaping and rejects malformed
-// input with an error rather than panicking.
+// UnmarshalJSON accepts a JSON string ("50.00") or a JSON number (50.0). Any
+// other token (object, array, boolean) and any non-numeric content is rejected
+// with an error rather than silently stored.
 func (d *Decimal) UnmarshalJSON(data []byte) error {
 	data = bytes.TrimSpace(data)
 	if len(data) == 0 || string(data) == "null" {
 		d.s = ""
 		return nil
 	}
-	if data[0] == '"' {
-		var s string
+
+	var s string
+	switch data[0] {
+	case '"':
 		if err := json.Unmarshal(data, &s); err != nil {
 			return err
 		}
-		d.s = strings.TrimSpace(s)
+	case '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+		s = string(data)
+	default:
+		return fmt.Errorf("invoicexpress: cannot unmarshal %s into Decimal", data)
+	}
+
+	s = strings.TrimSpace(s)
+	if s == "" {
+		d.s = ""
 		return nil
 	}
-	d.s = string(data)
+	if !validDecimal(s) {
+		return fmt.Errorf("invoicexpress: invalid decimal %q", s)
+	}
+	d.s = s
 	return nil
 }
