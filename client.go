@@ -220,7 +220,7 @@ func (c *Client) doWithStatus(ctx context.Context, method, path string, params u
 
 		status := resp.StatusCode
 		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if readErr != nil {
 			lastErr = fmt.Errorf("invoicexpress: read response: %w", readErr)
 			if idempotent && c.shouldRetry(attempt) {
@@ -238,7 +238,6 @@ func (c *Client) doWithStatus(ctx context.Context, method, path string, params u
 		if status >= 400 {
 			apiErr := newAPIError(status, resp.Status, respBody)
 			if c.retryableStatus(status, idempotent) && c.shouldRetry(attempt) {
-				lastErr = apiErr
 				if werr := c.backoff(ctx, attempt, resp); werr != nil {
 					return status, werr
 				}

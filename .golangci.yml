@@ -1,0 +1,35 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - misspell
+    - revive
+    - unconvert
+    - prealloc
+
+  settings:
+    revive:
+      rules:
+        # Grouped enum constants use a single section comment, which is
+        # idiomatic Go; don't require a doc comment on each value.
+        - name: exported
+          disabled: true
+
+  exclusions:
+    rules:
+      # Tests favour brevity over checking every error.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - bodyclose
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
