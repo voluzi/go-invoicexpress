@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"time"
 )
 
@@ -25,8 +24,8 @@ type invoiceResponse struct {
 
 // invoiceListResponse is the JSON response for a list of invoices.
 type invoiceListResponse struct {
-	Invoices []Invoice `json:"invoices"`
-	Pagination PageInfo `json:"pagination"`
+	Invoices   []Invoice `json:"invoices"`
+	Pagination PageInfo  `json:"pagination"`
 }
 
 // Create creates a new invoice document of the given type.
@@ -197,13 +196,4 @@ func (s *InvoicesService) ListAll(ctx context.Context, docType DocumentType) ([]
 		page++
 	}
 	return all, nil
-}
-
-// AddQueryParam adds a key/value to an existing url.Values or creates a new one.
-func addQueryParam(params url.Values, key, value string) url.Values {
-	if params == nil {
-		params = url.Values{}
-	}
-	params.Set(key, value)
-	return params
 }
