@@ -25,7 +25,7 @@ type clientResponse struct {
 // clientListResponse is the JSON response for a list of clients.
 type clientListResponse struct {
 	Clients    []Customer `json:"clients"`
-	Pagination PageInfo `json:"pagination"`
+	Pagination PageInfo   `json:"pagination"`
 }
 
 // List returns a paginated list of clients.
@@ -89,7 +89,7 @@ func (s *ClientsService) FindByCode(ctx context.Context, code string) (*Customer
 func (s *ClientsService) ListInvoices(ctx context.Context, clientID int64, opts *ListOptions) ([]Invoice, *PageInfo, error) {
 	path := fmt.Sprintf("/clients/%d/invoices.json", clientID)
 	var resp invoiceListResponse
-	if err := s.client.do(ctx, http.MethodPost, path, paginationParams(opts), nil, &resp); err != nil {
+	if err := s.client.do(ctx, http.MethodGet, path, paginationParams(opts), nil, &resp); err != nil {
 		return nil, nil, fmt.Errorf("invoicexpress: clients.list-invoices: %w", err)
 	}
 	return resp.Invoices, &resp.Pagination, nil

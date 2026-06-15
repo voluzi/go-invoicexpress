@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"time"
 )
 
@@ -25,18 +24,38 @@ type invoiceResponse struct {
 
 // invoiceListResponse is the JSON response for a list of invoices.
 type invoiceListResponse struct {
-	Invoices []Invoice `json:"invoices"`
-	Pagination PageInfo `json:"pagination"`
+	Invoices   []Invoice `json:"invoices"`
+	Pagination PageInfo  `json:"pagination"`
 }
 
-// Create creates a new invoice document of the given type.
+// Create creates a new invoice document of the given type. The request is
+// validated client-side first, so obvious mistakes fail fast without a
+// network round-trip.
 func (s *InvoicesService) Create(ctx context.Context, docType DocumentType, req *InvoiceCreateRequest) (*Invoice, error) {
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
 	path := fmt.Sprintf("/%s.json", docType)
 	var resp invoiceResponse
 	if err := s.client.do(ctx, http.MethodPost, path, nil, invoiceWrapper{Invoice: req}, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: invoices.create: %w", err)
 	}
 	return &resp.Invoice, nil
+}
+
+// CreateAndFinalize creates an invoice document and immediately transitions it
+// to the finalized state — the common path for issuing a legally-binding
+// document in one call. A draft has no fiscal value until finalized.
+func (s *InvoicesService) CreateAndFinalize(ctx context.Context, docType DocumentType, req *InvoiceCreateRequest) (*Invoice, error) {
+	inv, err := s.Create(ctx, docType, req)
+	if err != nil {
+		return nil, err
+	}
+	finalized, err := s.ChangeState(ctx, docType, inv.ID, StateFinalized, "")
+	if err != nil {
+		return inv, fmt.Errorf("invoicexpress: invoices.create-and-finalize: created id=%d but finalize failed: %w", inv.ID, err)
+	}
+	return finalized, nil
 }
 
 // Get retrieves an invoice document by ID.
@@ -197,13 +216,4 @@ func (s *InvoicesService) ListAll(ctx context.Context, docType DocumentType) ([]
 		page++
 	}
 	return all, nil
-}
-
-// AddQueryParam adds a key/value to an existing url.Values or creates a new one.
-func addQueryParam(params url.Values, key, value string) url.Values {
-	if params == nil {
-		params = url.Values{}
-	}
-	params.Set(key, value)
-	return params
 }

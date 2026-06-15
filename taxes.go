@@ -2,9 +2,13 @@ package invoicexpress
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 )
+
+// ErrTaxNotFound is returned by TaxesService.FindByName when no tax matches.
+var ErrTaxNotFound = errors.New("invoicexpress: tax not found")
 
 // TaxesService handles tax operations.
 type TaxesService struct {
@@ -34,6 +38,23 @@ func (s *TaxesService) List(ctx context.Context) ([]Tax, error) {
 		return nil, fmt.Errorf("invoicexpress: taxes.list: %w", err)
 	}
 	return resp.Taxes, nil
+}
+
+// FindByName returns the tax with the given name (exact match), or
+// ErrTaxNotFound if none matches. Use it to confirm a tax exists before
+// issuing a document — InvoiceXpress silently applies the default tax for an
+// unknown name rather than erroring, which would produce a wrong invoice.
+func (s *TaxesService) FindByName(ctx context.Context, name string) (*Tax, error) {
+	taxes, err := s.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range taxes {
+		if taxes[i].Name == name {
+			return &taxes[i], nil
+		}
+	}
+	return nil, ErrTaxNotFound
 }
 
 // Get retrieves a tax by ID.
