@@ -120,6 +120,26 @@ fake the client in your own tests without the network.
 Use the `DocumentType*` constants. A draft document has no fiscal value until
 finalized (`ChangeState(..., StateFinalized, "")`, or `CreateAndFinalize`).
 
+## Coverage & limitations
+
+Covered: documents (create/get/list/update/change-state/related/email/PDF),
+partial payments, QR codes, clients (incl. find-by-name/code), items, taxes,
+sequences, SAF-T export, accounts.
+
+Known limitations (PRs welcome):
+
+- **Estimates and guides decode into the shared document shape** (`Estimate` and
+  `Guide` are aliases of the document type). Transport-specific guide fields
+  beyond the common set are not yet modeled.
+- **Invoices are never deleted** — Portuguese law forbids deleting a finalized
+  document. Cancel instead via `ChangeState(..., StateCanceled, reason)`.
+- **Monetary amounts use `Decimal`; tax rates/percentages use `float64`.**
+- Validation-error parsing from 422 bodies is best-effort across the shapes the
+  API has used; the raw body is always available in `APIError.Body`.
+- This client does not compute VAT. For cross-border EU VAT (per-country rates,
+  reverse charge, OSS) determine the tax upstream (e.g. Stripe Tax) and pass the
+  resulting amounts and `TaxExemption` code through.
+
 ## License
 
 [MIT](LICENSE)

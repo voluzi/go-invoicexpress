@@ -19,17 +19,17 @@ type guideWrapper struct {
 
 // guideResponse is the JSON response for a single guide.
 type guideResponse struct {
-	Guide Invoice `json:"guide"`
+	Guide Guide `json:"guide"`
 }
 
 // guideListResponse is the JSON response for a list of guides.
 type guideListResponse struct {
-	Guides     []Invoice `json:"guides"`
-	Pagination PageInfo  `json:"pagination"`
+	Guides     []Guide  `json:"guides"`
+	Pagination PageInfo `json:"pagination"`
 }
 
 // Create creates a new guide document.
-func (s *GuidesService) Create(ctx context.Context, docType DocumentType, req *GuideCreateRequest) (*Invoice, error) {
+func (s *GuidesService) Create(ctx context.Context, docType DocumentType, req *GuideCreateRequest) (*Guide, error) {
 	path := fmt.Sprintf("/%s.json", docType)
 	var resp guideResponse
 	if err := s.client.do(ctx, http.MethodPost, path, nil, guideWrapper{Guide: req}, &resp); err != nil {
@@ -39,7 +39,7 @@ func (s *GuidesService) Create(ctx context.Context, docType DocumentType, req *G
 }
 
 // Get retrieves a guide document by ID.
-func (s *GuidesService) Get(ctx context.Context, docType DocumentType, id int64) (*Invoice, error) {
+func (s *GuidesService) Get(ctx context.Context, docType DocumentType, id int64) (*Guide, error) {
 	path := fmt.Sprintf("/%s/%d.json", docType, id)
 	var resp guideResponse
 	if err := s.client.do(ctx, http.MethodGet, path, nil, nil, &resp); err != nil {
@@ -49,7 +49,7 @@ func (s *GuidesService) Get(ctx context.Context, docType DocumentType, id int64)
 }
 
 // List returns a paginated list of guide documents.
-func (s *GuidesService) List(ctx context.Context, docType DocumentType, opts *ListOptions) ([]Invoice, *PageInfo, error) {
+func (s *GuidesService) List(ctx context.Context, docType DocumentType, opts *ListOptions) ([]Guide, *PageInfo, error) {
 	path := fmt.Sprintf("/%s.json", docType)
 	var resp guideListResponse
 	if err := s.client.do(ctx, http.MethodGet, path, paginationParams(opts), nil, &resp); err != nil {
@@ -68,7 +68,7 @@ func (s *GuidesService) Update(ctx context.Context, docType DocumentType, id int
 }
 
 // ChangeState transitions a guide document to a new state.
-func (s *GuidesService) ChangeState(ctx context.Context, docType DocumentType, id int64, state DocumentState, message string) (*Invoice, error) {
+func (s *GuidesService) ChangeState(ctx context.Context, docType DocumentType, id int64, state DocumentState, message string) (*Guide, error) {
 	path := fmt.Sprintf("/%s/%d/change-state.json", docType, id)
 	body := struct {
 		Guide ChangeStateRequest `json:"guide"`

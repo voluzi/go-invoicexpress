@@ -29,22 +29,22 @@ type InvoicesAPI interface {
 
 // EstimatesAPI is the behaviour of EstimatesService.
 type EstimatesAPI interface {
-	Create(ctx context.Context, docType DocumentType, req *InvoiceCreateRequest) (*Invoice, error)
-	Get(ctx context.Context, docType DocumentType, id int64) (*Invoice, error)
-	List(ctx context.Context, docType DocumentType, opts *ListOptions) ([]Invoice, *PageInfo, error)
+	Create(ctx context.Context, docType DocumentType, req *InvoiceCreateRequest) (*Estimate, error)
+	Get(ctx context.Context, docType DocumentType, id int64) (*Estimate, error)
+	List(ctx context.Context, docType DocumentType, opts *ListOptions) ([]Estimate, *PageInfo, error)
 	Update(ctx context.Context, docType DocumentType, id int64, req *InvoiceUpdateRequest) error
-	ChangeState(ctx context.Context, docType DocumentType, id int64, state DocumentState, message string) (*Invoice, error)
+	ChangeState(ctx context.Context, docType DocumentType, id int64, state DocumentState, message string) (*Estimate, error)
 	SendByEmail(ctx context.Context, docType DocumentType, id int64, req *EmailRequest) error
 	GeneratePDF(ctx context.Context, id int64, pollInterval time.Duration) (string, error)
 }
 
 // GuidesAPI is the behaviour of GuidesService.
 type GuidesAPI interface {
-	Create(ctx context.Context, docType DocumentType, req *GuideCreateRequest) (*Invoice, error)
-	Get(ctx context.Context, docType DocumentType, id int64) (*Invoice, error)
-	List(ctx context.Context, docType DocumentType, opts *ListOptions) ([]Invoice, *PageInfo, error)
+	Create(ctx context.Context, docType DocumentType, req *GuideCreateRequest) (*Guide, error)
+	Get(ctx context.Context, docType DocumentType, id int64) (*Guide, error)
+	List(ctx context.Context, docType DocumentType, opts *ListOptions) ([]Guide, *PageInfo, error)
 	Update(ctx context.Context, docType DocumentType, id int64, req *GuideUpdateRequest) error
-	ChangeState(ctx context.Context, docType DocumentType, id int64, state DocumentState, message string) (*Invoice, error)
+	ChangeState(ctx context.Context, docType DocumentType, id int64, state DocumentState, message string) (*Guide, error)
 	SendByEmail(ctx context.Context, docType DocumentType, id int64, req *EmailRequest) error
 	GeneratePDF(ctx context.Context, id int64, pollInterval time.Duration) (string, error)
 }
