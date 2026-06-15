@@ -1,0 +1,38 @@
+name: Bug report
+description: Report a problem with the library
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! **Never paste API keys, tokens, or real fiscal data** — redact them first.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: go-invoicexpress version (or commit) and Go version.
+      placeholder: "v0.1.0, go1.24"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what occurred instead?
+    validations:
+      required: true
+  - type: textarea
+    id: endpoint
+    attributes:
+      label: Endpoint / call
+      description: Which method/endpoint was involved, and the error or response (redacted).
+    validations:
+      required: false
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: A small snippet that reproduces the issue, if possible.
+      render: go
+    validations:
+      required: false
