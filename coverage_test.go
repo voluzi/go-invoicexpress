@@ -87,7 +87,7 @@ func TestInvoicesRemainingMethods(t *testing.T) {
 	if err := c.Invoices.SendByEmail(ctx, dt, 1, &EmailRequest{Client: EmailClientRef{Email: "a@b.c"}}); err != nil {
 		t.Errorf("SendByEmail: %v", err)
 	}
-	if _, err := c.Invoices.CreatePartialPayment(ctx, 1, &PartialPaymentRequest{Amount: 10, PaymentMechanism: PaymentMechanismMBWay, PaymentDate: NewDate(time.Now())}); err != nil {
+	if _, err := c.Invoices.CreatePartialPayment(ctx, 1, &PartialPaymentRequest{Amount: NewDecimal("10"), PaymentMechanism: PaymentMechanismMBWay, PaymentDate: NewDate(time.Now())}); err != nil {
 		t.Errorf("CreatePartialPayment: %v", err)
 	}
 	if err := c.Invoices.CancelPartialPayment(ctx, 1, 2); err != nil {
@@ -166,7 +166,7 @@ func TestClientsItemsTaxesSequencesAccountsRemaining(t *testing.T) {
 	if _, err := c.Items.Get(ctx, 1); err != nil {
 		t.Errorf("Items.Get: %v", err)
 	}
-	if err := c.Items.Update(ctx, 1, &ItemUpdateRequest{Name: "X", UnitPrice: 1}); err != nil {
+	if err := c.Items.Update(ctx, 1, &ItemUpdateRequest{Name: "X", UnitPrice: NewDecimal("1")}); err != nil {
 		t.Errorf("Items.Update: %v", err)
 	}
 	if _, err := c.Items.ListAll(ctx); err != nil {

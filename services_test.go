@@ -61,7 +61,7 @@ func TestItemsCRUD(t *testing.T) {
 		}
 	})
 	ctx := context.Background()
-	it, err := c.Items.Create(ctx, &ItemCreateRequest{Name: "Widget", UnitPrice: 10})
+	it, err := c.Items.Create(ctx, &ItemCreateRequest{Name: "Widget", UnitPrice: NewDecimal("10")})
 	if err != nil || it.ID != 5 {
 		t.Fatalf("create: %v %+v", err, it)
 	}
