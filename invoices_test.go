@@ -120,8 +120,10 @@ func TestInvoicesListAllPaginates(t *testing.T) {
 		switch page {
 		case "", "1":
 			w.Write([]byte(`{"invoices":[{"id":1},{"id":2}],"pagination":{"current_page":1,"total_pages":2}}`))
-		default:
+		case "2":
 			w.Write([]byte(`{"invoices":[{"id":3}],"pagination":{"current_page":2,"total_pages":2}}`))
+		default:
+			w.Write([]byte(`{"invoices":[],"pagination":{"current_page":3,"total_pages":2}}`))
 		}
 	})
 	all, err := c.Invoices.ListAll(context.Background(), DocumentTypeInvoice)

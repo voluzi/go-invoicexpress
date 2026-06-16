@@ -100,34 +100,29 @@ func (s *EstimatesService) SendByEmail(ctx context.Context, docType DocumentType
 	return nil
 }
 
+// ListAll returns all estimate documents across all pages for the given type.
+func (s *EstimatesService) ListAll(ctx context.Context, docType DocumentType) ([]Estimate, error) {
+	var all []Estimate
+	page := 1
+	for {
+		estimates, pageInfo, err := s.List(ctx, docType, &ListOptions{Page: page, PerPage: 25})
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, estimates...)
+		if page > pageInfo.TotalPages || len(estimates) == 0 {
+			break
+		}
+		page++
+	}
+	return all, nil
+}
+
 // GeneratePDF starts PDF generation and polls until the PDF is ready.
 func (s *EstimatesService) GeneratePDF(ctx context.Context, id int64, pollInterval time.Duration) (string, error) {
-	if pollInterval <= 0 {
-		pollInterval = 2 * time.Second
+	url, err := s.client.pollPDF(ctx, id, pollInterval)
+	if err != nil {
+		return "", fmt.Errorf("invoicexpress: estimates.generate-pdf: %w", err)
 	}
-	path := fmt.Sprintf("/api/pdf/%d.json", id)
-	for {
-		var resp pdfResponse
-		statusCode, err := s.client.doWithStatus(ctx, http.MethodGet, path, nil, nil, &resp)
-		if err != nil {
-			if statusCode == http.StatusAccepted {
-				select {
-				case <-ctx.Done():
-					return "", ctx.Err()
-				case <-time.After(pollInterval):
-					continue
-				}
-			}
-			return "", fmt.Errorf("invoicexpress: estimates.generate-pdf: %w", err)
-		}
-		if statusCode == http.StatusAccepted {
-			select {
-			case <-ctx.Done():
-				return "", ctx.Err()
-			case <-time.After(pollInterval):
-				continue
-			}
-		}
-		return resp.Output.PDFURL, nil
-	}
+	return url, nil
 }

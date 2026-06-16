@@ -189,11 +189,16 @@ func NewClient(accountName, apiKey string, opts ...Option) *Client {
 
 // buildURL constructs the full request URL with the api_key appended. It does
 // not mutate the caller's params.
-func (c *Client) buildURL(path string, params url.Values) string {
+func cloneURLValues(v url.Values) url.Values {
 	q := url.Values{}
-	for k, v := range params {
-		q[k] = v
+	for k, vals := range v {
+		q[k] = append([]string(nil), vals...)
 	}
+	return q
+}
+
+func (c *Client) buildURL(path string, params url.Values) string {
+	q := cloneURLValues(params)
 	q.Set("api_key", c.apiKey)
 	return c.baseURL + path + "?" + q.Encode()
 }
@@ -232,9 +237,14 @@ func (c *Client) doWithStatus(ctx context.Context, method, path string, params u
 		if reqBytes != nil {
 			reqBody = bytes.NewReader(reqBytes)
 		}
+		// fullURL embeds the api_key in its query string. If request creation
+		// fails (malformed method/path), the error message would otherwise leak
+		// the literal key because it is not wrapped in a *url.Error.
 		req, err := http.NewRequestWithContext(ctx, method, fullURL, reqBody)
 		if err != nil {
-			return 0, fmt.Errorf("invoicexpress: create request: %w", redactAPIKey(err))
+			// NewRequestWithContext errors are plain errors, not *url.Error, so
+			// redactAPIKey would not catch them. Redact the URL explicitly.
+			return 0, fmt.Errorf("invoicexpress: create request: %s", redactAPIKeyInURL(err.Error()))
 		}
 		if reqBytes != nil {
 			req.Header.Set("Content-Type", "application/json; charset=utf-8")
@@ -335,8 +345,14 @@ func (c *Client) nextDelay(attempt int, resp *http.Response) time.Duration {
 	if base <= 0 {
 		base = 500 * time.Millisecond
 	}
-	// Exponential: base * 2^(attempt-1), capped at MaxDelay.
-	d := base << (attempt - 1)
+	// Exponential: base * 2^(attempt-1), capped at MaxDelay. Guard against
+	// shift overflow when MaxAttempts is configured with a huge value.
+	shift := attempt - 1
+	const maxShift = 62 // keep room for signed time.Duration multiplication.
+	if shift > maxShift {
+		shift = maxShift
+	}
+	d := base << shift
 	if d <= 0 || (c.retry.MaxDelay > 0 && d > c.retry.MaxDelay) {
 		d = c.retry.MaxDelay
 	}
@@ -391,6 +407,41 @@ func paginationParams(opts *ListOptions) url.Values {
 		}
 	}
 	return params
+}
+
+// pollPDF polls the shared PDF endpoint until the document is ready or the
+// context is cancelled. It is used by InvoicesService, EstimatesService, and
+// GuidesService so the polling loop is implemented once.
+func (c *Client) pollPDF(ctx context.Context, id int64, pollInterval time.Duration) (string, error) {
+	if pollInterval <= 0 {
+		pollInterval = 2 * time.Second
+	}
+	path := fmt.Sprintf("/api/pdf/%d.json", id)
+	for {
+		var resp pdfResponse
+		statusCode, err := c.doWithStatus(ctx, http.MethodGet, path, nil, nil, &resp)
+		if err != nil {
+			if statusCode == http.StatusAccepted {
+				// Still generating, wait and retry.
+				select {
+				case <-ctx.Done():
+					return "", ctx.Err()
+				case <-time.After(pollInterval):
+					continue
+				}
+			}
+			return "", err
+		}
+		if statusCode == http.StatusAccepted {
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(pollInterval):
+				continue
+			}
+		}
+		return resp.Output.PDFURL, nil
+	}
 }
 
 // rateLimiter is a minimal token-bucket limiter (no external dependencies).

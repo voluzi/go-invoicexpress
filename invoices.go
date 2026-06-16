@@ -136,35 +136,11 @@ type pdfResponse struct {
 // GeneratePDF starts PDF generation and returns a PDF URL (async, polls until ready).
 // It polls with the given interval until the PDF is ready or context is cancelled.
 func (s *InvoicesService) GeneratePDF(ctx context.Context, id int64, pollInterval time.Duration) (string, error) {
-	if pollInterval <= 0 {
-		pollInterval = 2 * time.Second
+	url, err := s.client.pollPDF(ctx, id, pollInterval)
+	if err != nil {
+		return "", fmt.Errorf("invoicexpress: invoices.generate-pdf: %w", err)
 	}
-	path := fmt.Sprintf("/api/pdf/%d.json", id)
-	for {
-		var resp pdfResponse
-		statusCode, err := s.client.doWithStatus(ctx, http.MethodGet, path, nil, nil, &resp)
-		if err != nil {
-			if statusCode == http.StatusAccepted {
-				// Still generating, wait and retry.
-				select {
-				case <-ctx.Done():
-					return "", ctx.Err()
-				case <-time.After(pollInterval):
-					continue
-				}
-			}
-			return "", fmt.Errorf("invoicexpress: invoices.generate-pdf: %w", err)
-		}
-		if statusCode == http.StatusAccepted {
-			select {
-			case <-ctx.Done():
-				return "", ctx.Err()
-			case <-time.After(pollInterval):
-				continue
-			}
-		}
-		return resp.Output.PDFURL, nil
-	}
+	return url, nil
 }
 
 // CreatePartialPayment creates a partial payment/receipt for a document.
@@ -226,7 +202,7 @@ func (s *InvoicesService) ListAll(ctx context.Context, docType DocumentType) ([]
 			return nil, err
 		}
 		all = append(all, invoices...)
-		if page >= pageInfo.TotalPages || len(invoices) == 0 {
+		if page > pageInfo.TotalPages || len(invoices) == 0 {
 			break
 		}
 		page++

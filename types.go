@@ -139,7 +139,7 @@ type InvoiceCreateRequest struct {
 }
 
 // InvoiceUpdateRequest holds data for updating an invoice document.
-type InvoiceUpdateRequest = InvoiceCreateRequest
+type InvoiceUpdateRequest InvoiceCreateRequest
 
 // Invoice is the full invoice document as returned by the API.
 type Invoice struct {
@@ -171,14 +171,15 @@ type Invoice struct {
 }
 
 // Estimate is an estimate document (quote, proforma, fees note). Estimates
-// share the document shape with Invoice — estimate-specific fields are a
-// subset — so this is an alias for ergonomic, self-documenting return types.
-type Estimate = Invoice
+// share the same field layout as Invoice — estimate-specific fields are a
+// subset — so the underlying type is identical, but Estimate is a distinct
+// type for safer, self-documenting APIs.
+type Estimate Invoice
 
 // Guide is a transport/shipping/devolution guide document. Guides share the
-// core document shape with Invoice (alias). Guide-specific transport fields
-// beyond the common set are not yet modeled — see the README limitations.
-type Guide = Invoice
+// core document shape with Invoice. Guide-specific transport fields beyond
+// the common set are not yet modeled — see the README limitations.
+type Guide Invoice
 
 // ClientSummary is the client info embedded in invoice responses.
 type ClientSummary struct {
@@ -285,7 +286,7 @@ type ClientCreateRequest struct {
 }
 
 // ClientUpdateRequest holds data for updating a client.
-type ClientUpdateRequest = ClientCreateRequest
+type ClientUpdateRequest ClientCreateRequest
 
 // Item represents a product/service item in InvoiceXpress.
 type Item struct {
@@ -309,7 +310,7 @@ type ItemCreateRequest struct {
 }
 
 // ItemUpdateRequest holds data for updating an item.
-type ItemUpdateRequest = ItemCreateRequest
+type ItemUpdateRequest ItemCreateRequest
 
 // Sequence represents a document numbering sequence.
 type Sequence struct {
@@ -341,7 +342,7 @@ type TaxCreateRequest struct {
 }
 
 // TaxUpdateRequest holds data for updating a tax.
-type TaxUpdateRequest = TaxCreateRequest
+type TaxUpdateRequest TaxCreateRequest
 
 // SAFTExportResult holds the result of a SAF-T export.
 type SAFTExportResult struct {
@@ -385,4 +386,4 @@ type GuideCreateRequest struct {
 }
 
 // GuideUpdateRequest holds data for updating a guide document.
-type GuideUpdateRequest = GuideCreateRequest
+type GuideUpdateRequest GuideCreateRequest

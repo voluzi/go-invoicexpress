@@ -214,3 +214,99 @@ func TestItemValidationRequiresBothPriceAndQuantity(t *testing.T) {
 		t.Errorf("item with both should pass: %v", err)
 	}
 }
+
+func TestRequestCreationErrorRedactsAPIKey(t *testing.T) {
+	c := NewClient("acct", "supersecretkey", WithBaseURL("https://x.test"))
+	// An invalid method triggers a request-creation error (not a transport
+	// error), and the URL containing the api_key would otherwise leak.
+	err := c.do(context.Background(), "bad method with spaces", "/x.json", nil, nil, nil)
+	if err == nil {
+		t.Fatal("expected a request-creation error")
+	}
+	if strings.Contains(err.Error(), "supersecretkey") {
+		t.Errorf("api_key leaked in request-creation error: %v", err)
+	}
+}
+
+func TestRetryBackOffDoesNotOverflow(t *testing.T) {
+	c := NewClient("acct", "k",
+		WithBaseURL("https://x.test"),
+		WithRetry(RetryConfig{MaxAttempts: 1000, BaseDelay: time.Millisecond, MaxDelay: time.Hour}),
+	)
+	// A huge attempt number must not panic or produce a negative duration.
+	d := c.nextDelay(1000, nil)
+	if d <= 0 {
+		t.Errorf("nextDelay produced non-positive duration: %v", d)
+	}
+	if d > time.Hour {
+		t.Errorf("nextDelay exceeded MaxDelay: %v", d)
+	}
+}
+
+func TestEstimatesListAllPaginates(t *testing.T) {
+	c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		switch page {
+		case "", "1":
+			w.Write([]byte(`{"estimates":[{"id":1},{"id":2}],"pagination":{"current_page":1,"total_pages":2}}`))
+		case "2":
+			w.Write([]byte(`{"estimates":[{"id":3}],"pagination":{"current_page":2,"total_pages":2}}`))
+		default:
+			w.Write([]byte(`{"estimates":[],"pagination":{"current_page":3,"total_pages":2}}`))
+		}
+	})
+	all, err := c.Estimates.ListAll(context.Background(), DocumentTypeQuote)
+	if err != nil {
+		t.Fatalf("list-all: %v", err)
+	}
+	if len(all) != 3 {
+		t.Errorf("got %d estimates across pages, want 3", len(all))
+	}
+}
+
+func TestGuidesListAllPaginates(t *testing.T) {
+	c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		switch page {
+		case "", "1":
+			w.Write([]byte(`{"guides":[{"id":1},{"id":2}],"pagination":{"current_page":1,"total_pages":2}}`))
+		case "2":
+			w.Write([]byte(`{"guides":[{"id":3}],"pagination":{"current_page":2,"total_pages":2}}`))
+		default:
+			w.Write([]byte(`{"guides":[],"pagination":{"current_page":3,"total_pages":2}}`))
+		}
+	})
+	all, err := c.Guides.ListAll(context.Background(), DocumentTypeTransport)
+	if err != nil {
+		t.Fatalf("list-all: %v", err)
+	}
+	if len(all) != 3 {
+		t.Errorf("got %d guides across pages, want 3", len(all))
+	}
+}
+
+func TestDistinctEstimateAndGuideTypes(t *testing.T) {
+	// Converting the aliases to distinct types means callers cannot pass an
+	// Invoice where an Estimate is expected.
+	var _ Estimate = Estimate{ID: 1}
+	var _ Guide = Guide{ID: 1}
+	// The compiler enforces the rest; this test documents the intent.
+}
+
+func TestUpdateRequestValidateDelegates(t *testing.T) {
+	if err := (&InvoiceUpdateRequest{}).Validate(); !IsValidation(err) {
+		t.Errorf("InvoiceUpdateRequest.Validate: want ValidationError, got %v", err)
+	}
+	if err := (&ClientUpdateRequest{}).Validate(); !IsValidation(err) {
+		t.Errorf("ClientUpdateRequest.Validate: want ValidationError, got %v", err)
+	}
+	if err := (&ItemUpdateRequest{}).Validate(); !IsValidation(err) {
+		t.Errorf("ItemUpdateRequest.Validate: want ValidationError, got %v", err)
+	}
+	if err := (&GuideUpdateRequest{}).Validate(); !IsValidation(err) {
+		t.Errorf("GuideUpdateRequest.Validate: want ValidationError, got %v", err)
+	}
+	if err := (&TaxUpdateRequest{}).Validate(); !IsValidation(err) {
+		t.Errorf("TaxUpdateRequest.Validate: want ValidationError, got %v", err)
+	}
+}

@@ -100,34 +100,29 @@ func (s *GuidesService) SendByEmail(ctx context.Context, docType DocumentType, i
 	return nil
 }
 
+// ListAll returns all guide documents across all pages for the given type.
+func (s *GuidesService) ListAll(ctx context.Context, docType DocumentType) ([]Guide, error) {
+	var all []Guide
+	page := 1
+	for {
+		guides, pageInfo, err := s.List(ctx, docType, &ListOptions{Page: page, PerPage: 25})
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, guides...)
+		if page > pageInfo.TotalPages || len(guides) == 0 {
+			break
+		}
+		page++
+	}
+	return all, nil
+}
+
 // GeneratePDF starts PDF generation and polls until the PDF is ready.
 func (s *GuidesService) GeneratePDF(ctx context.Context, id int64, pollInterval time.Duration) (string, error) {
-	if pollInterval <= 0 {
-		pollInterval = 2 * time.Second
+	url, err := s.client.pollPDF(ctx, id, pollInterval)
+	if err != nil {
+		return "", fmt.Errorf("invoicexpress: guides.generate-pdf: %w", err)
 	}
-	path := fmt.Sprintf("/api/pdf/%d.json", id)
-	for {
-		var resp pdfResponse
-		statusCode, err := s.client.doWithStatus(ctx, http.MethodGet, path, nil, nil, &resp)
-		if err != nil {
-			if statusCode == http.StatusAccepted {
-				select {
-				case <-ctx.Done():
-					return "", ctx.Err()
-				case <-time.After(pollInterval):
-					continue
-				}
-			}
-			return "", fmt.Errorf("invoicexpress: guides.generate-pdf: %w", err)
-		}
-		if statusCode == http.StatusAccepted {
-			select {
-			case <-ctx.Done():
-				return "", ctx.Err()
-			case <-time.After(pollInterval):
-				continue
-			}
-		}
-		return resp.Output.PDFURL, nil
-	}
+	return url, nil
 }
