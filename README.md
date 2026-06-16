@@ -28,7 +28,8 @@ ctx := context.Background()
 // Issue a finalized invoice-receipt (fatura-recibo) in one call.
 inv, err := client.Invoices.CreateAndFinalize(ctx, ix.DocumentTypeInvoiceReceipt, &ix.InvoiceCreateRequest{
     Date:   ix.NewDate(time.Now()),
-    Client: ix.ClientRef{Name: "ACME, Lda", FiscalID: "500000000", Email: "geral@acme.pt"},
+    // Replace with the client's real NIF; "999999990" is the public Consumidor Final placeholder.
+    Client: ix.ClientRef{Name: "ACME, Lda", FiscalID: "999999990", Email: "geral@acme.pt"},
     Items: []ix.ItemRef{{
         Name:      "Plano Pro (mensal)",
         UnitPrice: ix.NewDecimal("29.00"),
@@ -51,7 +52,7 @@ _ = client.Invoices.SendByEmail(ctx, ix.DocumentTypeInvoiceReceipt, inv.ID, &ix.
 ## Configuration
 
 ```go
-client := ix.NewClient("my-account", "api-key",
+client := ix.NewClient("my-account", os.Getenv("INVOICEXPRESS_API_KEY"),
     ix.WithTimeout(20*time.Second),
     ix.WithRetry(ix.RetryConfig{MaxAttempts: 5, BaseDelay: 500*time.Millisecond, MaxDelay: 10*time.Second}),
     ix.WithRateLimit(10, 5),      // ≤10 req/s, burst 5 — stays under server limits

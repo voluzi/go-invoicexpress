@@ -118,6 +118,7 @@ type Client struct {
 	baseURL     string
 	userAgent   string
 	httpClient  *http.Client
+	timeout     time.Duration // applied after all options so WithTimeout/WithHTTPClient are order-independent
 	retry       RetryConfig
 	limiter     *rateLimiter // optional; nil disables client-side rate limiting
 	randFloat   func() float64
@@ -162,11 +163,14 @@ func WithUserAgent(ua string) Option {
 	}
 }
 
-// WithTimeout sets the per-request timeout on the underlying HTTP client.
+// WithTimeout sets the per-request timeout on the underlying HTTP client. It is
+// order-independent with respect to WithHTTPClient: the timeout is applied to
+// the final HTTP client after all options run, so a WithHTTPClient supplied
+// afterwards cannot silently discard it.
 func WithTimeout(d time.Duration) Option {
 	return func(c *Client) {
 		if d > 0 {
-			c.httpClient.Timeout = d
+			c.timeout = d
 		}
 	}
 }
@@ -202,6 +206,11 @@ func NewClient(accountName, apiKey string, opts ...Option) *Client {
 	}
 	for _, opt := range opts {
 		opt(c)
+	}
+	// Apply the timeout last so it lands on whichever *http.Client is final,
+	// regardless of the order of WithTimeout and WithHTTPClient.
+	if c.timeout > 0 {
+		c.httpClient.Timeout = c.timeout
 	}
 
 	c.Invoices = &InvoicesService{client: c}

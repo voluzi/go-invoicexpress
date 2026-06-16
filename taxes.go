@@ -31,13 +31,38 @@ type taxListResponse struct {
 	Pagination PageInfo `json:"pagination"`
 }
 
-// List returns all taxes.
+// List returns the first page of taxes. Use ListPage to control pagination or
+// ListAll to fetch every page.
 func (s *TaxesService) List(ctx context.Context) ([]Tax, error) {
+	taxes, _, err := s.ListPage(ctx, nil)
+	return taxes, err
+}
+
+// ListPage returns a single page of taxes along with the pagination metadata.
+func (s *TaxesService) ListPage(ctx context.Context, opts *ListOptions) ([]Tax, *PageInfo, error) {
 	var resp taxListResponse
-	if err := s.client.do(ctx, http.MethodGet, "/taxes.json", nil, nil, &resp); err != nil {
-		return nil, fmt.Errorf("invoicexpress: taxes.list: %w", err)
+	if err := s.client.do(ctx, http.MethodGet, "/taxes.json", paginationParams(opts), nil, &resp); err != nil {
+		return nil, nil, fmt.Errorf("invoicexpress: taxes.list: %w", err)
 	}
-	return resp.Taxes, nil
+	return resp.Taxes, &resp.Pagination, nil
+}
+
+// ListAll returns all taxes across all pages.
+func (s *TaxesService) ListAll(ctx context.Context) ([]Tax, error) {
+	var all []Tax
+	page := 1
+	for {
+		taxes, pageInfo, err := s.ListPage(ctx, &ListOptions{Page: page, PerPage: 25})
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, taxes...)
+		if page >= pageInfo.TotalPages || len(taxes) == 0 {
+			break
+		}
+		page++
+	}
+	return all, nil
 }
 
 // FindByName returns the tax with the given name (exact match), or
