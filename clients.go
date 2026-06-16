@@ -109,7 +109,7 @@ func (s *ClientsService) ListAll(ctx context.Context) ([]Customer, error) {
 			return nil, err
 		}
 		all = append(all, clients...)
-		if page > pageInfo.TotalPages || len(clients) == 0 {
+		if page >= pageInfo.TotalPages || len(clients) == 0 {
 			break
 		}
 		page++

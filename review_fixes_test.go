@@ -310,6 +310,29 @@ func TestDistinctEstimateAndGuideTypes(t *testing.T) {
 	}
 }
 
+func TestTaxCreateValidatesBeforeNetwork(t *testing.T) {
+	hit := false
+	c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+		_, _ = w.Write([]byte(`{"tax":{"id":1}}`))
+	})
+	ctx := context.Background()
+	// Missing name and non-positive value must fail before any network call.
+	if _, err := c.Taxes.Create(ctx, &TaxCreateRequest{}); !IsValidation(err) {
+		t.Errorf("taxes.Create: want ValidationError, got %v", err)
+	}
+	if hit {
+		t.Error("invalid tax request must not reach the API")
+	}
+	// A valid request passes validation and reaches the server.
+	if _, err := c.Taxes.Create(ctx, &TaxCreateRequest{Name: "IVA23", Value: 23}); err != nil {
+		t.Errorf("valid tax create should succeed: %v", err)
+	}
+	if !hit {
+		t.Error("valid tax request should reach the API")
+	}
+}
+
 func TestUpdateRequestValidateDelegates(t *testing.T) {
 	if err := (&InvoiceUpdateRequest{}).Validate(); !IsValidation(err) {
 		t.Errorf("InvoiceUpdateRequest.Validate: want ValidationError, got %v", err)

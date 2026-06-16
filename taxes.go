@@ -67,8 +67,12 @@ func (s *TaxesService) Get(ctx context.Context, id int64) (*Tax, error) {
 	return &resp.Tax, nil
 }
 
-// Create creates a new tax.
+// Create creates a new tax. The request is validated client-side before any
+// network call, consistent with the other Create methods.
 func (s *TaxesService) Create(ctx context.Context, req *TaxCreateRequest) (*Tax, error) {
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
 	var resp taxResponse
 	if err := s.client.do(ctx, http.MethodPost, "/taxes.json", nil, taxWrapper{Tax: req}, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: taxes.create: %w", err)

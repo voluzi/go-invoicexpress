@@ -87,7 +87,7 @@ func (s *ItemsService) ListAll(ctx context.Context) ([]Item, error) {
 			return nil, err
 		}
 		all = append(all, items...)
-		if page > pageInfo.TotalPages || len(items) == 0 {
+		if page >= pageInfo.TotalPages || len(items) == 0 {
 			break
 		}
 		page++
