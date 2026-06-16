@@ -300,15 +300,13 @@ func TestGuidesListAllPaginates(t *testing.T) {
 	}
 }
 
-func TestDistinctEstimateAndGuideTypes(t *testing.T) {
-	// Estimate and Guide are distinct named types, not aliases of Invoice, so
-	// the compiler rejects passing an Invoice where one of them is expected.
-	// Construct each to confirm they are concrete struct types with the shared
-	// fields; the compiler enforces the non-assignability.
+func TestEstimateAndGuideAliasesExposeInvoiceFields(t *testing.T) {
+	// Estimate and Guide are aliases of Invoice for source compatibility while
+	// keeping ergonomic, self-documenting return types.
 	est := Estimate{ID: 1}
 	gd := Guide{ID: 1}
 	if est.ID != 1 || gd.ID != 1 {
-		t.Fatalf("expected distinct Estimate/Guide struct types, got %+v %+v", est, gd)
+		t.Fatalf("expected Estimate/Guide aliases to expose Invoice fields, got %+v %+v", est, gd)
 	}
 }
 
