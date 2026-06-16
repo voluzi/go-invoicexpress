@@ -110,7 +110,7 @@ func (s *GuidesService) ListAll(ctx context.Context, docType DocumentType) ([]Gu
 			return nil, err
 		}
 		all = append(all, guides...)
-		if page > pageInfo.TotalPages || len(guides) == 0 {
+		if page >= pageInfo.TotalPages || len(guides) == 0 {
 			break
 		}
 		page++

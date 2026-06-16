@@ -216,15 +216,28 @@ func TestItemValidationRequiresBothPriceAndQuantity(t *testing.T) {
 }
 
 func TestRequestCreationErrorRedactsAPIKey(t *testing.T) {
-	c := NewClient("acct", "supersecretkey", WithBaseURL("https://x.test"))
-	// An invalid method triggers a request-creation error (not a transport
-	// error), and the URL containing the api_key would otherwise leak.
-	err := c.do(context.Background(), "bad method with spaces", "/x.json", nil, nil, nil)
-	if err == nil {
-		t.Fatal("expected a request-creation error")
+	cases := map[string]struct {
+		method, path string
+	}{
+		// An invalid method triggers a request-creation error (not a transport
+		// error). Its message omits the URL, but must still never leak the key.
+		"invalid method": {"bad method with spaces", "/x.json"},
+		// A control character in the path makes url.Parse fail with a message
+		// that embeds the full URL — including ?api_key=… — which is itself
+		// not a parseable URL, so a URL-only redactor would miss it.
+		"unparseable url": {http.MethodGet, "/\x7f.json"},
 	}
-	if strings.Contains(err.Error(), "supersecretkey") {
-		t.Errorf("api_key leaked in request-creation error: %v", err)
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			c := NewClient("acct", "supersecretkey", WithBaseURL("https://x.test"))
+			err := c.do(context.Background(), tc.method, tc.path, nil, nil, nil)
+			if err == nil {
+				t.Fatal("expected a request-creation error")
+			}
+			if strings.Contains(err.Error(), "supersecretkey") {
+				t.Errorf("api_key leaked in request-creation error: %v", err)
+			}
+		})
 	}
 }
 
@@ -286,11 +299,15 @@ func TestGuidesListAllPaginates(t *testing.T) {
 }
 
 func TestDistinctEstimateAndGuideTypes(t *testing.T) {
-	// Converting the aliases to distinct types means callers cannot pass an
-	// Invoice where an Estimate is expected.
-	var _ Estimate = Estimate{ID: 1}
-	var _ Guide = Guide{ID: 1}
-	// The compiler enforces the rest; this test documents the intent.
+	// Estimate and Guide are distinct named types, not aliases of Invoice, so
+	// the compiler rejects passing an Invoice where one of them is expected.
+	// Construct each to confirm they are concrete struct types with the shared
+	// fields; the compiler enforces the non-assignability.
+	est := Estimate{ID: 1}
+	gd := Guide{ID: 1}
+	if est.ID != 1 || gd.ID != 1 {
+		t.Fatalf("expected distinct Estimate/Guide struct types, got %+v %+v", est, gd)
+	}
 }
 
 func TestUpdateRequestValidateDelegates(t *testing.T) {

@@ -37,6 +37,17 @@ func redactAPIKeyBytes(body []byte, key string) []byte {
 	return bytes.ReplaceAll(body, []byte(key), []byte("REDACTED"))
 }
 
+// redactAPIKeyString removes the literal api_key value from an arbitrary
+// string. Unlike redactAPIKeyInURL it does not assume the whole string is a
+// parseable URL, so it is safe for error messages that merely embed the URL
+// (e.g. a url.Parse failure whose text is `parse "https://…?api_key=…": …`).
+func redactAPIKeyString(s, key string) string {
+	if key == "" {
+		return s
+	}
+	return strings.ReplaceAll(s, key, "REDACTED")
+}
+
 func redactAPIKeyInURL(raw string) string {
 	u, parseErr := url.Parse(raw)
 	if parseErr != nil {
@@ -243,8 +254,10 @@ func (c *Client) doWithStatus(ctx context.Context, method, path string, params u
 		req, err := http.NewRequestWithContext(ctx, method, fullURL, reqBody)
 		if err != nil {
 			// NewRequestWithContext errors are plain errors, not *url.Error, so
-			// redactAPIKey would not catch them. Redact the URL explicitly.
-			return 0, fmt.Errorf("invoicexpress: create request: %s", redactAPIKeyInURL(err.Error()))
+			// redactAPIKey would not catch them. The error text may embed the
+			// full URL (e.g. a url.Parse failure), which is not itself a
+			// parseable URL — so strip the literal key rather than parsing.
+			return 0, fmt.Errorf("invoicexpress: create request: %s", redactAPIKeyString(err.Error(), c.apiKey))
 		}
 		if reqBytes != nil {
 			req.Header.Set("Content-Type", "application/json; charset=utf-8")

@@ -110,7 +110,7 @@ func (s *EstimatesService) ListAll(ctx context.Context, docType DocumentType) ([
 			return nil, err
 		}
 		all = append(all, estimates...)
-		if page > pageInfo.TotalPages || len(estimates) == 0 {
+		if page >= pageInfo.TotalPages || len(estimates) == 0 {
 			break
 		}
 		page++

@@ -202,7 +202,7 @@ func (s *InvoicesService) ListAll(ctx context.Context, docType DocumentType) ([]
 			return nil, err
 		}
 		all = append(all, invoices...)
-		if page > pageInfo.TotalPages || len(invoices) == 0 {
+		if page >= pageInfo.TotalPages || len(invoices) == 0 {
 			break
 		}
 		page++
