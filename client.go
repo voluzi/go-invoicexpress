@@ -37,15 +37,22 @@ func redactAPIKeyBytes(body []byte, key string) []byte {
 	return bytes.ReplaceAll(body, []byte(key), []byte("REDACTED"))
 }
 
-// redactAPIKeyString removes the literal api_key value from an arbitrary
-// string. Unlike redactAPIKeyInURL it does not assume the whole string is a
-// parseable URL, so it is safe for error messages that merely embed the URL
-// (e.g. a url.Parse failure whose text is `parse "https://…?api_key=…": …`).
+// redactAPIKeyString removes the api_key value from an arbitrary string. Unlike
+// redactAPIKeyInURL it does not assume the whole string is a parseable URL, so
+// it is safe for error messages that merely embed the URL (e.g. a url.Parse
+// failure whose text is `parse "https://…?api_key=…": …`). Because buildURL
+// passes the key through url.Values.Encode, a key containing reserved
+// characters (+, /, =, …) appears query-escaped in the URL — so both the raw
+// and the query-escaped forms are redacted.
 func redactAPIKeyString(s, key string) string {
 	if key == "" {
 		return s
 	}
-	return strings.ReplaceAll(s, key, "REDACTED")
+	s = strings.ReplaceAll(s, key, "REDACTED")
+	if escaped := url.QueryEscape(key); escaped != key {
+		s = strings.ReplaceAll(s, escaped, "REDACTED")
+	}
+	return s
 }
 
 func redactAPIKeyInURL(raw string) string {

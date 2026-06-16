@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -216,6 +217,7 @@ func TestItemValidationRequiresBothPriceAndQuantity(t *testing.T) {
 }
 
 func TestRequestCreationErrorRedactsAPIKey(t *testing.T) {
+	const apiKey = "super+secret/key="
 	cases := map[string]struct {
 		method, path string
 	}{
@@ -229,12 +231,12 @@ func TestRequestCreationErrorRedactsAPIKey(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			c := NewClient("acct", "supersecretkey", WithBaseURL("https://x.test"))
+			c := NewClient("acct", apiKey, WithBaseURL("https://x.test"))
 			err := c.do(context.Background(), tc.method, tc.path, nil, nil, nil)
 			if err == nil {
 				t.Fatal("expected a request-creation error")
 			}
-			if strings.Contains(err.Error(), "supersecretkey") {
+			if strings.Contains(err.Error(), apiKey) || strings.Contains(err.Error(), url.QueryEscape(apiKey)) {
 				t.Errorf("api_key leaked in request-creation error: %v", err)
 			}
 		})
@@ -338,15 +340,15 @@ func TestTaxCreateValidatesBeforeNetwork(t *testing.T) {
 		_, _ = w.Write([]byte(`{"tax":{"id":1}}`))
 	})
 	ctx := context.Background()
-	// Missing name and non-positive value must fail before any network call.
-	if _, err := c.Taxes.Create(ctx, &TaxCreateRequest{}); !IsValidation(err) {
+	// Missing name and negative value must fail before any network call.
+	if _, err := c.Taxes.Create(ctx, &TaxCreateRequest{Value: -1}); !IsValidation(err) {
 		t.Errorf("taxes.Create: want ValidationError, got %v", err)
 	}
 	if hit {
 		t.Error("invalid tax request must not reach the API")
 	}
-	// A valid request passes validation and reaches the server.
-	if _, err := c.Taxes.Create(ctx, &TaxCreateRequest{Name: "IVA23", Value: 23}); err != nil {
+	// Zero-rate/exempt taxes are valid and must reach the server.
+	if _, err := c.Taxes.Create(ctx, &TaxCreateRequest{Name: "IVA0", Value: 0}); err != nil {
 		t.Errorf("valid tax create should succeed: %v", err)
 	}
 	if !hit {

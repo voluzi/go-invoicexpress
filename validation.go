@@ -104,8 +104,8 @@ func (r *TaxCreateRequest) Validate() error {
 	if strings.TrimSpace(r.Name) == "" {
 		issues = append(issues, "name is required")
 	}
-	if r.Value <= 0 {
-		issues = append(issues, "value must be greater than zero")
+	if r.Value < 0 {
+		issues = append(issues, "value must not be negative")
 	}
 	return validationError(issues...)
 }
@@ -136,45 +136,4 @@ func (r *ItemCreateRequest) Validate() error {
 		issues = append(issues, "unit_price is required")
 	}
 	return validationError(issues...)
-}
-
-// Validate delegates to the underlying create request validation so update
-// callers can still fail fast when they choose to.
-func (r *InvoiceUpdateRequest) Validate() error {
-	if r == nil {
-		return &ValidationError{Issues: []string{"request is nil"}}
-	}
-	return (*InvoiceCreateRequest)(r).Validate()
-}
-
-// Validate delegates to the underlying create request validation.
-func (r *ClientUpdateRequest) Validate() error {
-	if r == nil {
-		return &ValidationError{Issues: []string{"request is nil"}}
-	}
-	return (*ClientCreateRequest)(r).Validate()
-}
-
-// Validate delegates to the underlying create request validation.
-func (r *ItemUpdateRequest) Validate() error {
-	if r == nil {
-		return &ValidationError{Issues: []string{"request is nil"}}
-	}
-	return (*ItemCreateRequest)(r).Validate()
-}
-
-// Validate delegates to the underlying create request validation.
-func (r *GuideUpdateRequest) Validate() error {
-	if r == nil {
-		return &ValidationError{Issues: []string{"request is nil"}}
-	}
-	return (*GuideCreateRequest)(r).Validate()
-}
-
-// Validate delegates to the underlying create request validation.
-func (r *TaxUpdateRequest) Validate() error {
-	if r == nil {
-		return &ValidationError{Issues: []string{"request is nil"}}
-	}
-	return (*TaxCreateRequest)(r).Validate()
 }
