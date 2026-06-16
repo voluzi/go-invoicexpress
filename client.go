@@ -434,18 +434,14 @@ func (c *Client) pollPDF(ctx context.Context, id int64, pollInterval time.Durati
 		var resp pdfResponse
 		statusCode, err := c.doWithStatus(ctx, http.MethodGet, path, nil, nil, &resp)
 		if err != nil {
-			if statusCode == http.StatusAccepted {
-				// Still generating, wait and retry.
-				select {
-				case <-ctx.Done():
-					return "", ctx.Err()
-				case <-time.After(pollInterval):
-					continue
-				}
-			}
+			// A real failure (transport, read, or decode error) must surface
+			// immediately. A genuine "still generating" reply is a 202 with an
+			// empty body, which returns no error — so we only keep polling on a
+			// clean 202 below, never swallow an error here.
 			return "", err
 		}
 		if statusCode == http.StatusAccepted {
+			// Still generating, wait and retry.
 			select {
 			case <-ctx.Done():
 				return "", ctx.Err()

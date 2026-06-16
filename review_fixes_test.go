@@ -310,6 +310,27 @@ func TestDistinctEstimateAndGuideTypes(t *testing.T) {
 	}
 }
 
+func TestGeneratePDFSurfacesErrorOn202(t *testing.T) {
+	// A 202 carrying an undecodable body is a real error, not "still
+	// generating" (which has an empty body). pollPDF must surface it instead of
+	// retrying forever.
+	c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{ not json`))
+	})
+	// A short deadline is a backstop: if the loop ever swallowed the error and
+	// span forever, this would fail with a context error instead of "decode".
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, err := c.Invoices.GeneratePDF(ctx, 9, time.Millisecond)
+	if err == nil {
+		t.Fatal("expected a decode error to surface")
+	}
+	if !strings.Contains(err.Error(), "decode") {
+		t.Errorf("expected the real decode error to surface, got %v", err)
+	}
+}
+
 func TestTaxCreateValidatesBeforeNetwork(t *testing.T) {
 	hit := false
 	c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
