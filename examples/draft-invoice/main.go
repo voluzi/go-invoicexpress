@@ -12,7 +12,7 @@
 //
 // Override any field with flags, e.g.:
 //
-//	go run ./examples/draft-invoice -client "ACME, Lda" -nif 500000000 -price 29.00 -tax IVA23
+//	go run ./examples/draft-invoice -client "ACME, Lda" -nif 999999990 -price 29.00 -tax IVA23
 package main
 
 import (

@@ -24,7 +24,7 @@ func main() {
 		Code:     "ACME",
 		Email:    "billing@acme.com",
 		Country:  "Portugal",
-		FiscalID: "500000000", // placeholder NIF (valid checksum, not a real entity)
+		FiscalID: "999999990", // public Consumidor Final placeholder — replace with the client's real NIF
 	})
 	if err != nil {
 		log.Fatalf("create client: %v", err)

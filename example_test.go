@@ -25,7 +25,7 @@ func ExampleInvoicesService_CreateAndFinalize() {
 	inv, err := client.Invoices.CreateAndFinalize(ctx, invoicexpress.DocumentTypeInvoiceReceipt,
 		&invoicexpress.InvoiceCreateRequest{
 			Date:   invoicexpress.NewDate(time.Now()),
-			Client: invoicexpress.ClientRef{Name: "ACME, Lda", FiscalID: "500000000"},
+			Client: invoicexpress.ClientRef{Name: "ACME, Lda", FiscalID: "999999990"}, // public Consumidor Final placeholder
 			Items: []invoicexpress.ItemRef{{
 				Name:      "Plano Pro",
 				UnitPrice: invoicexpress.NewDecimal("29.00"),

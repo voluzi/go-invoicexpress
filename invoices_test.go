@@ -24,7 +24,7 @@ func TestInvoicesCreate(t *testing.T) {
 
 	inv, err := c.Invoices.Create(context.Background(), DocumentTypeInvoiceReceipt, &InvoiceCreateRequest{
 		Date:   NewDate(time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)),
-		Client: ClientRef{Name: "ACME", FiscalID: "500000000"},
+		Client: ClientRef{Name: "ACME", FiscalID: "999999990"},
 		Items: []ItemRef{
 			{Name: "Plano Pro", UnitPrice: NewDecimal("50"), Quantity: NewDecimal("1"), Tax: &TaxRef{Name: "IVA23"}},
 		},

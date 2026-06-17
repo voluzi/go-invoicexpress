@@ -4,9 +4,8 @@ import "testing"
 
 func TestValidPortugueseNIF(t *testing.T) {
 	valid := []string{
-		"999999990", // official Consumidor Final
-		"123456789",
-		"500000000",
+		"999999990", // official Consumidor Final (public, documented placeholder)
+		"123456789", // synthetic, sequential — structurally valid, not a real entity
 	}
 	for _, n := range valid {
 		if !ValidPortugueseNIF(n) {

@@ -145,8 +145,24 @@ func (r *ItemCreateRequest) Validate() error {
 	if strings.TrimSpace(r.Name) == "" {
 		issues = append(issues, "name is required")
 	}
-	if r.UnitPrice.IsZero() {
+	// Reject only an unset (empty) unit_price, not a zero value — the API allows
+	// zero-priced catalog items (free items, 100%-discount lines), matching the
+	// rule validateItems applies to document line items.
+	if r.UnitPrice.s == "" {
 		issues = append(issues, "unit_price is required")
 	}
 	return validationError(issues...)
+}
+
+// Validate checks the minimum fields required to create a sequence. The API
+// requires a serie_number to create a sequence, so we fail fast on an empty one
+// rather than round-tripping to the API for a 422.
+func (r *SequenceCreateRequest) Validate() error {
+	if r == nil {
+		return &ValidationError{Issues: []string{"request is nil"}}
+	}
+	if strings.TrimSpace(r.SerieNumber) == "" {
+		return validationError("serie_number is required")
+	}
+	return nil
 }
