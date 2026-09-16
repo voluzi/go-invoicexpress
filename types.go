@@ -1,5 +1,11 @@
 package invoicexpress
 
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+)
+
 // DocumentType represents the type of invoice/estimate/guide document.
 type DocumentType string
 
@@ -38,14 +44,17 @@ const (
 type PaymentMechanism string
 
 const (
-	PaymentMechanismTransfer     PaymentMechanism = "TB"
-	PaymentMechanismMultiBanco   PaymentMechanism = "MB"
-	PaymentMechanismCash         PaymentMechanism = "DIN"
-	PaymentMechanismDebitCard    PaymentMechanism = "CD"
-	PaymentMechanismCreditCard   PaymentMechanism = "CC"
-	PaymentMechanismCheck        PaymentMechanism = "CH"
+	PaymentMechanismTransfer       PaymentMechanism = "TB"
+	PaymentMechanismMultiBanco     PaymentMechanism = "MB"
+	PaymentMechanismCash           PaymentMechanism = "NU"
+	PaymentMechanismDebitCard      PaymentMechanism = "CD"
+	PaymentMechanismCreditCard     PaymentMechanism = "CC"
+	PaymentMechanismCheck          PaymentMechanism = "CH"
+	PaymentMechanismCheckOrVoucher PaymentMechanism = "CO"
+	// PaymentMechanismMBWay is retained for compatibility. MW is not listed in
+	// the provider's documented payment-mechanism table.
 	PaymentMechanismMBWay        PaymentMechanism = "MW"
-	PaymentMechanismCompensation PaymentMechanism = "CO"
+	PaymentMechanismCompensation PaymentMechanism = "CS"
 	PaymentMechanismOther        PaymentMechanism = "OU"
 )
 
@@ -85,9 +94,11 @@ type MBReference struct {
 	Reference string  `json:"reference"`
 }
 
-// ClientRef is used when creating/updating documents to reference a client.
+// ClientRef identifies an existing client by positive ID, then code, then
+// name. InvoiceXpress applies that precedence when more than one is present.
 type ClientRef struct {
-	Name         string             `json:"name"`
+	ID           int64              `json:"id,omitempty"`
+	Name         string             `json:"name,omitempty"`
 	Code         string             `json:"code,omitempty"`
 	Email        string             `json:"email,omitempty"`
 	Address      string             `json:"address,omitempty"`
@@ -142,7 +153,7 @@ type InvoiceCreateRequest struct {
 	MBReference    string          `json:"mb_reference,omitempty"`
 	OwnerInvoiceID int64           `json:"owner_invoice_id,omitempty"`
 	GlobalDiscount *GlobalDiscount `json:"global_discount,omitempty"`
-	ProprietaryUID string          `json:"proprietary_uid,omitempty"`
+	ProprietaryUID string          `json:"-"`
 }
 
 // InvoiceUpdateRequest holds data for updating an invoice document.
@@ -175,6 +186,57 @@ type Invoice struct {
 	Observations           string        `json:"observations"`
 	TaxExemption           string        `json:"tax_exemption"`
 	ProprietaryUID         string        `json:"proprietary_uid"`
+}
+
+// UnmarshalJSON accepts both documented numeric sequence identifiers and the
+// string form returned by older endpoints while keeping SequenceID source
+// compatible as a string.
+func (i *Invoice) UnmarshalJSON(data []byte) error {
+	type invoiceFields Invoice
+	decoded := invoiceFields{}
+	aux := struct {
+		SequenceID json.RawMessage `json:"sequence_id"`
+		*invoiceFields
+	}{invoiceFields: &decoded}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if len(aux.SequenceID) > 0 {
+		sequenceID, err := decodeSequenceID(aux.SequenceID)
+		if err != nil {
+			return err
+		}
+		decoded.SequenceID = sequenceID
+	}
+	*i = Invoice(decoded)
+	return nil
+}
+
+func decodeSequenceID(data []byte) (string, error) {
+	data = bytes.TrimSpace(data)
+	if bytes.Equal(data, []byte("null")) {
+		return "", nil
+	}
+	if len(data) > 0 && data[0] == '"' {
+		var value string
+		if err := json.Unmarshal(data, &value); err != nil {
+			return "", fmt.Errorf("decode sequence_id: %w", err)
+		}
+		return value, nil
+	}
+	start := 0
+	if len(data) > 0 && data[0] == '-' {
+		start = 1
+	}
+	if start == len(data) {
+		return "", fmt.Errorf("decode sequence_id: expected string, integer, or null")
+	}
+	for _, digit := range data[start:] {
+		if digit < '0' || digit > '9' {
+			return "", fmt.Errorf("decode sequence_id: expected string, integer, or null")
+		}
+	}
+	return string(data), nil
 }
 
 // Estimate is an estimate document (quote, proforma, fees note). Estimates
@@ -249,6 +311,7 @@ type PartialPayment struct {
 	PaymentMechanism PaymentMechanism `json:"payment_mechanism"`
 	Note             string           `json:"note"`
 	Serie            string           `json:"serie"`
+	Receipt          Invoice          `json:"-"`
 }
 
 // QRCode holds the QR code data for a document.
@@ -320,19 +383,63 @@ type ItemUpdateRequest = ItemCreateRequest
 
 // Sequence represents a document numbering sequence.
 //
-// The API names the series "serie" when it returns a sequence and
-// "serie_number" when it accepts one, so SerieNumber is filled from either key
-// (see UnmarshalJSON). DefaultSequence is a Flag because the API writes it as
-// 1/0, not true/false.
+// SerieNumber accepts both response keys observed for the sequence series.
+// DefaultSequence is a Flag because the API writes it as 1/0, not true/false.
 type Sequence struct {
-	ID              int64  `json:"id"`
-	SerieNumber     string `json:"serie_number"`
-	DefaultSequence Flag   `json:"default_sequence"`
+	ID                                     int64  `json:"id"`
+	SerieNumber                            string `json:"serie_number"`
+	DefaultSequence                        Flag   `json:"default_sequence"`
+	CurrentInvoiceNumber                   int64  `json:"current_invoice_number"`
+	CurrentInvoiceSequenceID               int64  `json:"current_invoice_sequence_id"`
+	CurrentInvoiceValidationCode           string `json:"current_invoice_validation_code"`
+	CurrentInvoiceReceiptNumber            int64  `json:"current_invoice_receipt_number"`
+	CurrentInvoiceReceiptSequenceID        int64  `json:"current_invoice_receipt_sequence_id"`
+	CurrentInvoiceReceiptValidationCode    string `json:"current_invoice_receipt_validation_code"`
+	CurrentSimplifiedInvoiceNumber         int64  `json:"current_simplified_invoice_number"`
+	CurrentSimplifiedInvoiceSequenceID     int64  `json:"current_simplified_invoice_sequence_id"`
+	CurrentSimplifiedInvoiceValidationCode string `json:"current_simplified_invoice_validation_code"`
+	CurrentCreditNoteNumber                int64  `json:"current_credit_note_number"`
+	CurrentCreditNoteSequenceID            int64  `json:"current_credit_note_sequence_id"`
+	CurrentCreditNoteValidationCode        string `json:"current_credit_note_validation_code"`
+	CurrentDebitNoteNumber                 int64  `json:"current_debit_note_number"`
+	CurrentDebitNoteSequenceID             int64  `json:"current_debit_note_sequence_id"`
+	CurrentDebitNoteValidationCode         string `json:"current_debit_note_validation_code"`
+	CurrentReceiptNumber                   int64  `json:"current_receipt_number"`
+	CurrentReceiptSequenceID               int64  `json:"current_receipt_sequence_id"`
+	CurrentReceiptValidationCode           string `json:"current_receipt_validation_code"`
+	CurrentShippingNumber                  int64  `json:"current_shipping_number"`
+	CurrentShippingSequenceID              int64  `json:"current_shipping_sequence_id"`
+	CurrentShippingValidationCode          string `json:"current_shipping_validation_code"`
+	CurrentTransportNumber                 int64  `json:"current_transport_number"`
+	CurrentTransportSequenceID             int64  `json:"current_transport_sequence_id"`
+	CurrentTransportValidationCode         string `json:"current_transport_validation_code"`
+	CurrentDevolutionNumber                int64  `json:"current_devolution_number"`
+	CurrentDevolutionSequenceID            int64  `json:"current_devolution_sequence_id"`
+	CurrentDevolutionValidationCode        string `json:"current_devolution_validation_code"`
+	CurrentProformaNumber                  int64  `json:"current_proforma_number"`
+	CurrentProformaSequenceID              int64  `json:"current_proforma_sequence_id"`
+	CurrentProformaValidationCode          string `json:"current_proforma_validation_code"`
+	CurrentQuoteNumber                     int64  `json:"current_quote_number"`
+	CurrentQuoteSequenceID                 int64  `json:"current_quote_sequence_id"`
+	CurrentQuoteValidationCode             string `json:"current_quote_validation_code"`
+	CurrentFeesNoteNumber                  int64  `json:"current_fees_note_number"`
+	CurrentFeesNoteSequenceID              int64  `json:"current_fees_note_sequence_id"`
+	CurrentFeesNoteValidationCode          string `json:"current_fees_note_validation_code"`
+	CurrentVATMOSSInvoiceNumber            int64  `json:"current_vat_moss_invoice_number"`
+	CurrentVATMOSSInvoiceSequenceID        int64  `json:"current_vat_moss_invoice_sequence_id"`
+	CurrentVATMOSSInvoiceValidationCode    string `json:"current_vat_moss_invoice_validation_code"`
+	CurrentVATMOSSCreditNoteNumber         int64  `json:"current_vat_moss_credit_note_number"`
+	CurrentVATMOSSCreditNoteSequenceID     int64  `json:"current_vat_moss_credit_note_sequence_id"`
+	CurrentVATMOSSCreditNoteValidationCode string `json:"current_vat_moss_credit_note_validation_code"`
+	CurrentVATMOSSReceiptNumber            int64  `json:"current_vat_moss_receipt_number"`
+	CurrentVATMOSSReceiptSequenceID        int64  `json:"current_vat_moss_receipt_sequence_id"`
+	CurrentVATMOSSReceiptValidationCode    string `json:"current_vat_moss_receipt_validation_code"`
 }
 
 // SequenceCreateRequest holds data for creating a sequence.
 type SequenceCreateRequest struct {
-	SerieNumber string `json:"serie_number"`
+	SerieNumber     string `json:"-"`
+	DefaultSequence bool   `json:"-"`
 }
 
 // Tax represents a tax rate in InvoiceXpress.
@@ -368,19 +475,44 @@ type TaxUpdateRequest = TaxCreateRequest
 
 // SAFTExportResult holds the result of a SAF-T export.
 type SAFTExportResult struct {
+	URL string `json:"url"`
+	// Deprecated: InvoiceXpress returns one archive URL, not a PDF URL.
 	PDFURL string `json:"pdf_url"`
+	// Deprecated: InvoiceXpress returns one archive URL, not an XML URL.
 	XMLURL string `json:"xml_url"`
 }
 
 // Account represents an InvoiceXpress account.
 type Account struct {
 	ID           int64  `json:"id"`
-	Organization string `json:"organization"`
+	Organization string `json:"organization_name"`
 	Name         string `json:"name"`
 	Email        string `json:"email"`
 	Country      string `json:"country"`
 	FiscalID     string `json:"fiscal_id"`
 	Subdomain    string `json:"subdomain"`
+	State        string `json:"state"`
+	ATConfigured bool   `json:"at_configured"`
+	Trial        bool   `json:"trial"`
+}
+
+func (a *Account) UnmarshalJSON(data []byte) error {
+	type accountFields Account
+	var v struct {
+		accountFields
+		OrganizationName   string `json:"organization_name"`
+		LegacyOrganization string `json:"organization"`
+	}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	*a = Account(v.accountFields)
+	if v.OrganizationName != "" {
+		a.Organization = v.OrganizationName
+	} else {
+		a.Organization = v.LegacyOrganization
+	}
+	return nil
 }
 
 // AddressInfo holds address details used in guides.
@@ -393,18 +525,24 @@ type AddressInfo struct {
 
 // GuideCreateRequest holds data for creating a guide document.
 type GuideCreateRequest struct {
-	Date           Date         `json:"date"`
-	DueDate        Date         `json:"due_date,omitempty"`
-	Reference      string       `json:"reference,omitempty"`
-	Observations   string       `json:"observations,omitempty"`
-	Retention      string       `json:"retention,omitempty"`
-	TaxExemption   string       `json:"tax_exemption,omitempty"`
-	SequenceID     string       `json:"sequence_id,omitempty"`
-	Client         ClientRef    `json:"client"`
-	Items          []ItemRef    `json:"items"`
-	AddressFrom    *AddressInfo `json:"address_from,omitempty"`
-	AddressTo      *AddressInfo `json:"address_to,omitempty"`
-	ProprietaryUID string       `json:"proprietary_uid,omitempty"`
+	Date                 Date         `json:"date"`
+	DueDate              Date         `json:"due_date"`
+	LoadedAt             DateTime     `json:"loaded_at"`
+	LicensePlate         string       `json:"license_plate,omitempty"`
+	Reference            string       `json:"reference,omitempty"`
+	Observations         string       `json:"observations,omitempty"`
+	Retention            string       `json:"retention,omitempty"`
+	TaxExemption         string       `json:"tax_exemption,omitempty"`
+	SequenceID           string       `json:"sequence_id,omitempty"`
+	ManualSequenceNumber string       `json:"manual_sequence_number,omitempty"`
+	Client               ClientRef    `json:"client"`
+	Items                []ItemRef    `json:"items"`
+	AddressFrom          *AddressInfo `json:"address_from"`
+	AddressTo            *AddressInfo `json:"address_to"`
+	TaxExemptionReason   string       `json:"tax_exemption_reason,omitempty"`
+	LoadSite             string       `json:"load_site,omitempty"`
+	DeliverySite         string       `json:"delivery_site,omitempty"`
+	ProprietaryUID       string       `json:"proprietary_uid,omitempty"`
 }
 
 // GuideUpdateRequest holds data for updating a guide document.

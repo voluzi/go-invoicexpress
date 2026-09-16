@@ -90,6 +90,7 @@ type SequencesAPI interface {
 	List(ctx context.Context) ([]Sequence, error)
 	Get(ctx context.Context, id int64) (*Sequence, error)
 	Create(ctx context.Context, req *SequenceCreateRequest) (*Sequence, error)
+	Register(ctx context.Context, id int64) ([]Sequence, error)
 	SetCurrent(ctx context.Context, id int64) error
 }
 

@@ -120,5 +120,5 @@ func main() {
 	if err != nil {
 		log.Fatalf("export SAF-T: %v", err)
 	}
-	fmt.Printf("SAF-T XML: %s\n", saft.XMLURL)
+	fmt.Printf("SAF-T archive: %s\n", saft.URL)
 }

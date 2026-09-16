@@ -16,13 +16,13 @@ func muxHandler(t *testing.T) http.HandlerFunc {
 		p := r.URL.Path
 		switch {
 		case strings.Contains(p, "/api/pdf/"):
-			w.Write([]byte(`{"output":{"pdf_url":"https://x/d.pdf"}}`))
+			w.Write([]byte(`{"output":{"pdfUrl":"https://x/d.pdf"}}`))
 		case strings.Contains(p, "/qr_codes/"):
 			w.Write([]byte(`{"qr_code":{"url":"https://x/qr","data":"d"}}`))
 		case strings.Contains(p, "/partial_payments"):
-			w.Write([]byte(`{"partial_payment":{"id":1,"amount":10}}`))
-		case strings.Contains(p, "/related-documents"):
-			w.Write([]byte(`{"invoices":[{"id":1}]}`))
+			w.Write([]byte(`{"receipt":{"id":1,"total":"10"}}`))
+		case strings.Contains(p, "/related_documents"):
+			w.Write([]byte(`{"documents":[{"id":1}]}`))
 		case strings.HasPrefix(p, "/quotes"), strings.HasPrefix(p, "/proformas"), strings.HasPrefix(p, "/fees_notes"):
 			if strings.HasSuffix(p, "s.json") {
 				w.Write([]byte(`{"estimates":[{"id":1}],"pagination":{"current_page":1,"total_pages":1}}`))
@@ -54,12 +54,12 @@ func muxHandler(t *testing.T) http.HandlerFunc {
 				w.Write([]byte(`{"tax":{"id":1}}`))
 			}
 		case strings.HasPrefix(p, "/sequences"):
-			if strings.HasSuffix(p, "/sequences.json") {
+			if r.Method == http.MethodGet && p == "/sequences.json" {
 				w.Write([]byte(`{"sequences":[{"id":1}]}`))
 			} else {
 				w.Write([]byte(`{"sequence":{"id":1}}`))
 			}
-		case strings.HasPrefix(p, "/users/accounts"):
+		case strings.HasPrefix(p, "/users/accounts"), strings.HasPrefix(p, "/api/accounts"):
 			w.Write([]byte(`{"account":{"id":1}}`))
 		default: // invoice family
 			// A collection path has one slash (/invoices.json); a single

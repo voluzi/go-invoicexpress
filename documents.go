@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// family is the documented generic wrapper for this document type's family:
+// family is the response-only fallback wrapper for this document type:
 // "invoice" for invoices, simplified invoices, receipts and notes; "estimate"
 // for quotes, proformas and fees notes; "guide" for transport documents.
 func (d DocumentType) family() string {
@@ -66,12 +66,9 @@ func sortedKeys(raw map[string]json.RawMessage) []string {
 	return keys
 }
 
-// Only responses are decoded this way. Request bodies keep the fixed key the
-// API documents for every document type ({"invoice": ...}, {"estimate": ...},
-// {"guide": ...}): the docs are the only evidence about what the endpoints
-// accept, and inventing a doc-typed request key from the response shape would
-// risk breaking document creation — the one call that must work — to fix a
-// problem nothing has observed.
+// Request and response envelopes intentionally differ. Invoice writes use
+// "invoice", estimate writes use "quote", and guide writes use "shipping";
+// this decoder handles only concrete and family-level response wrappers.
 
 // documentEnvelope decodes a single-document response, taking the wrapper key
 // from the document type. When the key is absent but the object holds exactly
@@ -145,11 +142,8 @@ func (e *documentListEnvelope) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	// An absent collection is NOT an empty one. This is the read an idempotency
-	// check depends on: "no documents, no error" is how a caller concludes that
-	// a receipt it already issued does not exist, and issues it a second time.
-	// A genuinely empty account answers {"invoice_receipts":[]}, which decodes
-	// to an empty slice here — the difference is the whole point.
+	// An absent collection is malformed. A genuine empty result uses an empty
+	// array under the expected document-family key.
 	if len(raw) == 0 {
 		return errors.New("invoicexpress: response carries no document list")
 	}

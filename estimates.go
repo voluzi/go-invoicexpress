@@ -12,12 +12,10 @@ type EstimatesService struct {
 	client *Client
 }
 
-// estimateWrapper is used for JSON serialization of estimate requests, under
-// the fixed key the API documents. Responses are keyed by document type
-// instead — a quote comes back as {"quote": {...}} / {"quotes": [...]} — so
-// they decode through documentEnvelope; see documents.go.
-type estimateWrapper struct {
-	Estimate interface{} `json:"estimate"`
+// quoteWrapper is the fixed request envelope for every estimate subtype.
+// Responses remain keyed by their concrete document type.
+type quoteWrapper struct {
+	Quote interface{} `json:"quote"`
 }
 
 // Create creates a new estimate document. The request is validated client-side
@@ -28,7 +26,7 @@ func (s *EstimatesService) Create(ctx context.Context, docType DocumentType, req
 	}
 	path := fmt.Sprintf("/%s.json", docType)
 	resp := documentEnvelope{docType: docType}
-	if err := s.client.do(ctx, http.MethodPost, path, nil, estimateWrapper{Estimate: req}, &resp); err != nil {
+	if err := s.client.do(ctx, http.MethodPost, path, nil, quoteWrapper{Quote: req}, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: estimates.create: %w", err)
 	}
 	return &resp.doc, nil
@@ -74,7 +72,7 @@ func (s *EstimatesService) List(ctx context.Context, docType DocumentType, opts 
 // Update updates an existing estimate document.
 func (s *EstimatesService) Update(ctx context.Context, docType DocumentType, id int64, req *InvoiceUpdateRequest) error {
 	path := fmt.Sprintf("/%s/%d.json", docType, id)
-	if err := s.client.do(ctx, http.MethodPut, path, nil, estimateWrapper{Estimate: req}, nil); err != nil {
+	if err := s.client.do(ctx, http.MethodPut, path, nil, quoteWrapper{Quote: req}, nil); err != nil {
 		return fmt.Errorf("invoicexpress: estimates.update: %w", err)
 	}
 	return nil
@@ -88,8 +86,8 @@ func (s *EstimatesService) ChangeState(ctx context.Context, docType DocumentType
 	}
 	path := fmt.Sprintf("/%s/%d/change-state.json", docType, id)
 	body := struct {
-		Estimate ChangeStateRequest `json:"estimate"`
-	}{Estimate: ChangeStateRequest{State: state, Message: message}}
+		Quote ChangeStateRequest `json:"quote"`
+	}{Quote: ChangeStateRequest{State: state, Message: message}}
 	resp := documentEnvelope{docType: docType}
 	if err := s.client.do(ctx, http.MethodPut, path, nil, body, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: estimates.change-state: %w", err)

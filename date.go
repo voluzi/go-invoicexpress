@@ -6,7 +6,10 @@ import (
 	"time"
 )
 
-const dateFormat = "02/01/2006"
+const (
+	dateFormat     = "02/01/2006"
+	dateTimeFormat = "02/01/2006 15:04:05"
+)
 
 // Date is a wrapper around time.Time that serializes/deserializes as dd/mm/yyyy.
 //
@@ -52,4 +55,44 @@ func (d *Date) UnmarshalJSON(data []byte) error {
 // String returns the date in dd/mm/yyyy format.
 func (d Date) String() string {
 	return d.Format(dateFormat)
+}
+
+// DateTime serializes InvoiceXpress guide timestamps as dd/mm/yyyy HH:mm:ss.
+type DateTime struct {
+	time.Time
+}
+
+// NewDateTime creates a DateTime from a time.Time value.
+func NewDateTime(t time.Time) DateTime {
+	return DateTime{Time: t}
+}
+
+// MarshalJSON implements json.Marshaler.
+func (d DateTime) MarshalJSON() ([]byte, error) {
+	if d.IsZero() {
+		return []byte("null"), nil
+	}
+	return []byte(`"` + d.Format(dateTimeFormat) + `"`), nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (d *DateTime) UnmarshalJSON(data []byte) error {
+	s := strings.TrimSpace(string(data))
+	if s == "null" || s == `""` {
+		return nil
+	}
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		s = s[1 : len(s)-1]
+	}
+	t, err := time.Parse(dateTimeFormat, s)
+	if err != nil {
+		return fmt.Errorf("invoicexpress: parse date-time %q: %w", s, err)
+	}
+	d.Time = t
+	return nil
+}
+
+// String returns the date and time in dd/mm/yyyy HH:mm:ss format.
+func (d DateTime) String() string {
+	return d.Format(dateTimeFormat)
 }

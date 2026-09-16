@@ -9,14 +9,6 @@ import (
 	"time"
 )
 
-// The payloads below are the shapes the live API actually returns, captured
-// from a real account. They are the contract these tests defend: the library
-// was originally written against the published examples, which disagree with
-// the API on three points — a rate is a string, a boolean is 1/0, and an unset
-// region or code is null. Decoding the real payload into the documented types
-// failed outright, so an account with a perfectly good tax table could not
-// issue a single document.
-
 func contractClient(t *testing.T, path, body string) *Client {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -34,6 +26,7 @@ func contractClient(t *testing.T, path, body string) *Client {
 }
 
 func TestTaxesListDecodesTheLiveWireShape(t *testing.T) {
+	// This tax payload was captured from a real account.
 	// value is a STRING, the default is "default_tax": 1 (not "is_default":
 	// true), region and code are null, and there is no pagination object.
 	const body = `{"taxes":[
@@ -105,15 +98,11 @@ func TestDocumentTaxDecodesNumericRate(t *testing.T) {
 
 func TestInvoiceListDecodesTheDocumentTypedKey(t *testing.T) {
 	// The regression that matters most: the list is keyed "invoice_receipts",
-	// not "invoices". Decoding the documented key found nothing and returned an
-	// empty slice with a nil error, so a caller scanning the list for an
-	// already-issued document concluded "none exists" every time — and issued a
-	// second legally-binding receipt on the next Stripe redelivery.
+	// not "invoices". Decoding the wrong key returned an empty slice with a nil
+	// error even though the provider returned documents.
 	const body = `{"invoice_receipts":[
-		{"id":501,"status":"settled","sequence_number":"42/AA","total":"12.30",
-		 "proprietary_uid":"in_test_0001"},
-		{"id":502,"status":"draft","sequence_number":"","total":"1.23",
-		 "proprietary_uid":"in_test_0002"}
+		{"id":501,"status":"settled","sequence_number":"42/AA","total":"12.30"},
+		{"id":502,"status":"draft","sequence_number":"","total":"1.23"}
 	],"pagination":{"total_entries":2,"current_page":1,"total_pages":1,"per_page":25}}`
 
 	docs, err := contractClient(t, "/invoice_receipts.json", body).
@@ -122,23 +111,13 @@ func TestInvoiceListDecodesTheDocumentTypedKey(t *testing.T) {
 		t.Fatalf("ListAll: %v", err)
 	}
 	if len(docs) != 2 {
-		t.Fatalf("got %d documents, want 2 — an empty list here is the duplicate-issuance bug", len(docs))
+		t.Fatalf("got %d documents, want 2", len(docs))
 	}
-
-	var found bool
-	for _, d := range docs {
-		if d.ProprietaryUID == "in_test_0001" {
-			found = true
-			if d.SequenceNumber != "42/AA" {
-				t.Errorf("SequenceNumber = %q, want 42/AA", d.SequenceNumber)
-			}
-			if d.Total.String() != "12.30" {
-				t.Errorf("Total = %q, want 12.30", d.Total.String())
-			}
-		}
+	if docs[0].ID != 501 || docs[0].SequenceNumber != "42/AA" {
+		t.Errorf("first document = %+v, want ID 501 and sequence 42/AA", docs[0])
 	}
-	if !found {
-		t.Error("the document was not found by its proprietary_uid — the idempotency lookup would issue a duplicate")
+	if docs[0].Total.String() != "12.30" {
+		t.Errorf("Total = %q, want 12.30", docs[0].Total.String())
 	}
 }
 
@@ -256,9 +235,8 @@ func TestDocumentEnvelopeRefusesAnotherFamilysWrapper(t *testing.T) {
 }
 
 func TestDocumentListRefusesAMissingCollection(t *testing.T) {
-	// The read an idempotency check depends on. "No documents, no error" is how
-	// a caller concludes a receipt it already issued does not exist — and
-	// issues a second legally-binding one.
+	// Missing or null collections are malformed successful responses, not empty
+	// result sets.
 	for _, body := range []string{
 		`{}`,
 		`{"pagination":{"total_entries":10,"total_pages":1,"current_page":1,"per_page":25}}`,
@@ -276,8 +254,6 @@ func TestDocumentListRefusesAMissingCollection(t *testing.T) {
 
 func TestDocumentListRefusesEntriesWithoutAnID(t *testing.T) {
 	// A collection whose entries are unusable is not a collection of documents.
-	// Scanning these for a proprietary_uid finds no match, which reads as "not
-	// issued yet" — and issues a duplicate.
 	for _, body := range []string{
 		`{"invoice_receipts":[null]}`,
 		`{"invoice_receipts":[{}]}`,
@@ -343,7 +319,7 @@ func TestDocumentEnvelopeRefusesAnAmbiguousBody(t *testing.T) {
 }
 
 func TestSequencesListDecodesSerieAndNumericDefault(t *testing.T) {
-	// The API returns "serie", while the create request takes "serie_number".
+	// Responses in the provider's documented shape use "serie".
 	const body = `{"sequences":[
 		{"id":201,"serie":"A","default_sequence":1,"current_invoice_number":70},
 		{"id":202,"serie":"BB","default_sequence":0,"current_invoice_number":0}

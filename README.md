@@ -125,6 +125,45 @@ fake the client in your own tests without the network.
 Use the `DocumentType*` constants. A draft document has no fiscal value until
 finalized (`ChangeState(..., StateFinalized, "")`, or `CreateAndFinalize`).
 
+Existing clients may be referenced with `ClientRef.ID`, `ClientRef.Code`, or
+`ClientRef.Name`; InvoiceXpress resolves them in that order. A positive ID or a
+nonblank code is sufficient, so callers do not need to repeat a mutable name.
+
+### Creation safety and `proprietary_uid`
+
+`InvoiceCreateRequest.ProprietaryUID` is sent as the documented top-level
+sibling of `invoice`. The provider documents it only as create input, however,
+and read-back through Get/List has not been verified. Do not assume it provides
+idempotent recovery after an uncertain POST outcome. Persist every returned
+document ID in durable application state, do not blindly retry document
+creation, and reconcile timeouts before issuing another fiscal document. The
+client does not retry POST requests after network errors or 5xx responses. An
+explicit HTTP 429 response is retried according to the configured retry policy;
+set `MaxAttempts: 1` to disable that retry too. The client does not implement
+find-then-create.
+
+### Guides
+
+Guide creation requires `Date`, `DueDate`, `LoadedAt`, complete source and
+destination addresses, a client reference, and at least one fully described
+item. Use `NewDateTime` for `loaded_at` (`dd/mm/yyyy HH:mm:ss`). Update requests
+remain pass-through payloads and are not subjected to full-create validation.
+
+### Sequences
+
+Create a sequence with `SequenceCreateRequest`; set `DefaultSequence` to opt in
+to the documented `"1"` wire value. Use `Sequences.Register(ctx, id)` to
+register an existing sequence with the Portuguese Tax Authority. Registration
+errors retain provider codes such as `"001"` in `APIError.Code`, including
+leading zeroes.
+
+### SAF-T export
+
+`SAFT.Export` returns the provider's single archive URL in
+`SAFTExportResult.URL`. A period without documents returns
+`ErrNoSAFTDocuments`. The deprecated `PDFURL` and `XMLURL` fields remain empty
+for source compatibility because the API does not return those artifacts.
+
 ## Coverage & limitations
 
 Covered: documents (create/get/list/update/change-state/related/email/PDF),
@@ -135,7 +174,9 @@ Known limitations (PRs welcome):
 
 - **Estimates and guides decode into the shared document shape** (`Estimate` and
   `Guide` are aliases of the document type). Transport-specific guide fields
-  beyond the common set are not yet modeled.
+  returned outside the common document fields are not yet modeled.
+- **`Accounts.List` targets an undocumented legacy endpoint.** `Accounts.Get`
+  uses the documented account route; prefer it when the account ID is known.
 - **Invoices are never deleted** — Portuguese law forbids deleting a finalized
   document. Cancel instead via `ChangeState(..., StateCanceled, reason)`.
 - **Monetary amounts use `Decimal`; tax rates/percentages use `Rate`** (underlying

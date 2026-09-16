@@ -19,10 +19,10 @@ func TestClientsCRUDAndFinders(t *testing.T) {
 			if r.URL.Query().Get("client_name") != "ACME" {
 				t.Errorf("missing client_name param")
 			}
-			w.Write([]byte(`{"clients":[{"id":1,"name":"ACME"}]}`))
+			w.Write([]byte(`{"client":{"id":1,"name":"ACME"}}`))
 		case r.URL.Path == "/clients/find-by-code.json":
 			w.Write([]byte(`{"client":{"id":1,"code":"AC"}}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/clients/1/invoices.json":
+		case r.Method == http.MethodPost && r.URL.Path == "/clients/1/invoices.json":
 			w.Write([]byte(`{"invoices":[{"id":9}],"pagination":{"current_page":1,"total_pages":1}}`))
 		default:
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
@@ -131,14 +131,14 @@ func TestSAFTExportPolls(t *testing.T) {
 			w.WriteHeader(http.StatusAccepted)
 			return
 		}
-		w.Write([]byte(`{"output":{"xml_url":"https://x/saft.xml","pdf_url":"https://x/saft.pdf"}}`))
+		w.Write([]byte(`{"url":"https://x/saft.zip"}`))
 	})
 	res, err := c.SAFT.Export(context.Background(), 6, 2026, time.Millisecond)
 	if err != nil {
 		t.Fatalf("saft.export: %v", err)
 	}
-	if res.XMLURL == "" {
-		t.Error("missing xml url")
+	if res.URL == "" {
+		t.Error("missing SAF-T URL")
 	}
 }
 
@@ -155,7 +155,7 @@ func TestAccountsList(t *testing.T) {
 	}
 }
 
-func TestEstimatesCreateWrapsAsEstimate(t *testing.T) {
+func TestEstimatesCreateWrapsAsQuote(t *testing.T) {
 	var raw string
 	c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/quotes.json" {
@@ -174,23 +174,19 @@ func TestEstimatesCreateWrapsAsEstimate(t *testing.T) {
 	if err != nil || est.ID != 2 {
 		t.Fatalf("estimates.create: %v %+v", err, est)
 	}
-	if !contains(raw, "estimate") {
-		t.Errorf("estimate body not wrapped: %s", raw)
+	if !contains(raw, "quote") {
+		t.Errorf("quote body not wrapped: %s", raw)
 	}
 }
 
-func TestGuidesCreateWrapsAsGuide(t *testing.T) {
+func TestGuidesCreateWrapsAsShipping(t *testing.T) {
 	c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/transports.json" {
 			t.Errorf("path = %s", r.URL.Path)
 		}
 		w.Write([]byte(`{"guide":{"id":4}}`))
 	})
-	g, err := c.Guides.Create(context.Background(), DocumentTypeTransport, &GuideCreateRequest{
-		Date:   NewDate(time.Now()),
-		Client: ClientRef{Name: "X"},
-		Items:  []ItemRef{{Name: "X", UnitPrice: NewDecimal("1"), Quantity: NewDecimal("1")}},
-	})
+	g, err := c.Guides.Create(context.Background(), DocumentTypeTransport, validGuideCreateRequest())
 	if err != nil || g.ID != 4 {
 		t.Fatalf("guides.create: %v %+v", err, g)
 	}

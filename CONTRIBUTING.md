@@ -31,5 +31,22 @@ Please include the InvoiceXpress endpoint involved, the request you made
 
 ## Releasing
 
-This project follows [SemVer](https://semver.org). Tag releases as `vX.Y.Z`
-and move the `[Unreleased]` section of the changelog under the new version.
+This project follows [SemVer](https://semver.org). Before creating a tag:
+
+1. Set the exported `Version` constant to a stable `X.Y.Z` value.
+2. Add exactly one nonempty `## [X.Y.Z] - YYYY-MM-DD` changelog section.
+3. Run the full local checks and metadata validator:
+
+   ```bash
+   make check
+   make lint
+   go build ./...
+   make release-check TAG=vX.Y.Z > /tmp/release-notes.md
+   ```
+
+4. Review `/tmp/release-notes.md`, then create and push the matching `vX.Y.Z`
+   tag only with maintainer approval.
+
+The tag workflow repeats build, vet, and race tests, validates the metadata,
+and creates a GitHub Release from that changelog section. It does not create or
+move tags and does not publish binaries, containers, or package-manager assets.

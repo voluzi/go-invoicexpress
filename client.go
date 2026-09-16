@@ -78,7 +78,7 @@ func redactAPIKeyInURL(raw string) string {
 
 const (
 	// Version is the library version, surfaced in the default User-Agent.
-	Version = "0.2.0"
+	Version = "0.3.0"
 
 	defaultBaseURLFormat = "https://%s.app.invoicexpress.com"
 	defaultTimeout       = 30 * time.Second
@@ -508,6 +508,9 @@ func (c *Client) pollPDF(ctx context.Context, id int64, pollInterval time.Durati
 			case <-time.After(pollInterval):
 				continue
 			}
+		}
+		if strings.TrimSpace(resp.Output.PDFURL) == "" {
+			return "", fmt.Errorf("invoicexpress: completed PDF response carries no URL")
 		}
 		return resp.Output.PDFURL, nil
 	}
