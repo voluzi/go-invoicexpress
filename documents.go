@@ -187,5 +187,14 @@ func (e *documentListEnvelope) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(payload, &e.docs); err != nil {
 		return fmt.Errorf("invoicexpress: decode %q: %w", key, err)
 	}
+	// Entries have to be documents too. [null, {}, {"error":"failed"}] decodes
+	// happily into zero-valued documents, and a duplicate check scanning their
+	// ids or proprietary uids would find no match — the same false "nothing
+	// exists here" the collection-level guard above refuses.
+	for i := range e.docs {
+		if e.docs[i].ID == 0 {
+			return fmt.Errorf("invoicexpress: %q entry %d has no id", key, i)
+		}
+	}
 	return nil
 }

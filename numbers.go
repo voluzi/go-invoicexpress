@@ -28,9 +28,17 @@ type Rate float64
 // silently read as zero — a tax silently at 0% would issue a wrong invoice.
 func (r *Rate) UnmarshalJSON(data []byte) error {
 	data = bytes.TrimSpace(data)
-	if len(data) == 0 || string(data) == "null" {
+	if len(data) == 0 {
 		*r = 0
 		return nil
+	}
+	if string(data) == "null" {
+		// An explicit null rate is an unknown rate, not 0%. The API sends null
+		// for a tax's region and code, never for its value, so this is
+		// something unexpected — and reading it as zero would let a caller
+		// matching on the rate stamp this tax on an untaxed line. An absent
+		// field is different: this method is never called for one.
+		return errors.New("invoicexpress: cannot unmarshal null into Rate")
 	}
 
 	s := string(data)

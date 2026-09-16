@@ -190,6 +190,27 @@ func TestDocumentEnvelopeRefusesAnEmptyResponseBody(t *testing.T) {
 	}
 }
 
+func TestSynchronousCallRefusesAnEmptyAcceptedBody(t *testing.T) {
+	// 202 with no body is meaningful only to the async pollers. On an ordinary
+	// document call it must not pass: it would hand back a document with no id,
+	// and CreateAndFinalize would then finalize document 0.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewClient("acct", "test-key", WithBaseURL(srv.URL))
+	if doc, err := c.Invoices.Get(context.Background(), DocumentTypeInvoiceReceipt, 7); err == nil {
+		t.Fatalf("Get returned %+v on an empty 202, want an error", doc)
+	}
+	if doc, err := c.Invoices.Create(context.Background(), DocumentTypeInvoiceReceipt, &InvoiceCreateRequest{
+		Client: ClientRef{Name: "ACME"},
+		Items:  []ItemRef{{Name: "Pro", UnitPrice: NewDecimal("10.00"), Quantity: NewDecimal("1")}},
+	}); err == nil {
+		t.Fatalf("Create returned %+v on an empty 202, want an error", doc)
+	}
+}
+
 func TestDocumentEnvelopeRefusesAWrapperWithoutAnID(t *testing.T) {
 	for _, body := range []string{
 		`{"invoice_receipt":{}}`,
@@ -237,6 +258,36 @@ func TestDocumentListRefusesAMissingCollection(t *testing.T) {
 				t.Fatalf("ListAll returned %d documents with no error, want an error", len(docs))
 			}
 		})
+	}
+}
+
+func TestDocumentListRefusesEntriesWithoutAnID(t *testing.T) {
+	// A collection whose entries are unusable is not a collection of documents.
+	// Scanning these for a proprietary_uid finds no match, which reads as "not
+	// issued yet" — and issues a duplicate.
+	for _, body := range []string{
+		`{"invoice_receipts":[null]}`,
+		`{"invoice_receipts":[{}]}`,
+		`{"invoice_receipts":[{"id":1},{"error":"failed"}]}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			docs, err := contractClient(t, "/invoice_receipts.json", body).
+				Invoices.ListAll(context.Background(), DocumentTypeInvoiceReceipt)
+			if err == nil {
+				t.Fatalf("ListAll returned %d documents with no error, want an error", len(docs))
+			}
+		})
+	}
+}
+
+func TestTaxesListRefusesANullRate(t *testing.T) {
+	// A tax whose rate is unknown must not read as 0%: a caller matching the
+	// rate Stripe charged could otherwise stamp IVA23 on an untaxed line.
+	const body = `{"taxes":[{"id":101,"name":"IVA23","value":null,"region":"PT","default_tax":1}]}`
+
+	taxes, err := contractClient(t, "/taxes.json", body).Taxes.ListAll(context.Background())
+	if err == nil {
+		t.Fatalf("ListAll returned %+v with no error, want an error", taxes)
 	}
 }
 
@@ -330,8 +381,10 @@ func TestRateUnmarshal(t *testing.T) {
 		{in: `"23"`, want: 23},
 		{in: `0`, want: 0},
 		{in: `"0.0"`, want: 0},
-		{in: `null`, want: 0},
 		{in: `"6"`, want: 6},
+		// An explicit null rate is unknown, not zero: the API nulls a tax's
+		// region and code, never its value.
+		{in: `null`, wantErr: true},
 		// A blank rate is not a zero rate: the API writes "0.0" for zero-rated
 		// tax, so blank is something unexpected and must not be read as 0%.
 		{in: `""`, wantErr: true},

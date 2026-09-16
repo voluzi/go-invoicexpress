@@ -244,13 +244,22 @@ func (c *Client) buildURL(path string, params url.Values) string {
 // do executes an HTTP request (with retries) and decodes the JSON response
 // into v. If v is nil, the response body is discarded.
 func (c *Client) do(ctx context.Context, method, path string, params url.Values, body, v interface{}) error {
-	_, err := c.doWithStatus(ctx, method, path, params, body, v)
+	_, err := c.doWithStatusOpts(ctx, method, path, params, body, v, false)
 	return err
 }
 
 // doWithStatus is like do but also returns the final HTTP status code. Used by
 // async operations that return 202 Accepted.
+// It also tolerates an empty body on 202 Accepted, which only the async
+// pollers may do: they read the status to decide whether to poll again. A
+// synchronous call goes through do, where an empty body is always an error —
+// otherwise an empty 202 from document creation would return a document with
+// no id, and finalization would be asked for document 0.
 func (c *Client) doWithStatus(ctx context.Context, method, path string, params url.Values, body, v interface{}) (int, error) {
+	return c.doWithStatusOpts(ctx, method, path, params, body, v, true)
+}
+
+func (c *Client) doWithStatusOpts(ctx context.Context, method, path string, params url.Values, body, v interface{}, allowEmptyAccepted bool) (int, error) {
 	var reqBytes []byte
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -346,14 +355,14 @@ func (c *Client) doWithStatus(ctx context.Context, method, path string, params u
 			// a nil error — a created document with no id, or an empty list
 			// that reads as "this account has none".
 			//
-			// 202 is the exception, and the reason doWithStatus exists: the
-			// async PDF and SAF-T endpoints answer it with no body while the
-			// file is still being generated, and the caller polls on.
-			if len(respBody) == 0 && status != http.StatusAccepted {
-				return status, fmt.Errorf("invoicexpress: %s answered %d with an empty body", path, status)
-			}
+			// The async PDF and SAF-T pollers are the only exception: they ask
+			// for 202 tolerance explicitly, because an empty 202 there means
+			// "still generating" rather than "no answer".
 			if len(respBody) == 0 {
-				return status, nil
+				if allowEmptyAccepted && status == http.StatusAccepted {
+					return status, nil
+				}
+				return status, fmt.Errorf("invoicexpress: %s answered %d with an empty body", path, status)
 			}
 			if err := json.Unmarshal(respBody, v); err != nil {
 				return status, fmt.Errorf("invoicexpress: decode response: %w", err)
