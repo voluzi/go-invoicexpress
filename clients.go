@@ -102,11 +102,12 @@ func (s *ClientsService) FindByCode(ctx context.Context, code string) (*Customer
 	return &resp.Client, nil
 }
 
-// ListInvoices returns the invoices for a specific client.
+// ListInvoices returns the invoices for a specific client. Although the
+// provider requires POST, this read-only operation uses idempotent retries.
 func (s *ClientsService) ListInvoices(ctx context.Context, clientID int64, opts *ListOptions) ([]Invoice, *PageInfo, error) {
 	path := fmt.Sprintf("/clients/%d/invoices.json", clientID)
 	resp := documentListEnvelope{docType: DocumentTypeInvoice}
-	if err := s.client.do(ctx, http.MethodPost, path, paginationParams(opts), nil, &resp); err != nil {
+	if err := s.client.doIdempotent(ctx, http.MethodPost, path, paginationParams(opts), nil, &resp); err != nil {
 		return nil, nil, fmt.Errorf("invoicexpress: clients.list-invoices: %w", err)
 	}
 	return resp.docs, &resp.page, nil

@@ -33,13 +33,58 @@ func Validate(version, tag string, changelog []byte) (string, error) {
 		return "", fmt.Errorf("changelog section for %s has invalid date %q: %w", version, date, err)
 	}
 
-	contentEnd := len(changelog)
-	if next := sectionHeading.FindIndex(changelog[match[1]:]); next != nil {
-		contentEnd = match[1] + next[0]
+	section := string(changelog[match[1]:])
+	contentEnd := len(section)
+	if next := nextSectionHeading(section); next >= 0 {
+		contentEnd = next
 	}
-	notes := strings.TrimSpace(string(changelog[match[1]:contentEnd]))
-	if notes == "" {
+	notes := strings.Trim(section[:contentEnd], "\r\n")
+	if strings.TrimSpace(notes) == "" {
 		return "", fmt.Errorf("changelog section for %s is empty", version)
 	}
 	return notes + "\n", nil
+}
+
+func nextSectionHeading(section string) int {
+	var fence byte
+	var fenceLength int
+	for offset := 0; offset < len(section); {
+		lineEnd := strings.IndexByte(section[offset:], '\n')
+		nextOffset := len(section)
+		if lineEnd >= 0 {
+			lineEnd += offset
+			nextOffset = lineEnd + 1
+		} else {
+			lineEnd = len(section)
+		}
+		line := strings.TrimSuffix(section[offset:lineEnd], "\r")
+		trimmed := strings.TrimLeft(line, " ")
+		if len(line)-len(trimmed) <= 3 {
+			marker, length := fenceRun(trimmed)
+			switch {
+			case fence == 0 && length >= 3 && (marker != '`' || !strings.ContainsRune(trimmed[length:], '`')):
+				fence = marker
+				fenceLength = length
+			case fence != 0 && marker == fence && length >= fenceLength && strings.TrimSpace(trimmed[length:]) == "":
+				fence = 0
+				fenceLength = 0
+			case fence == 0 && sectionHeading.MatchString(line):
+				return offset
+			}
+		}
+		offset = nextOffset
+	}
+	return -1
+}
+
+func fenceRun(line string) (byte, int) {
+	if line == "" || (line[0] != '`' && line[0] != '~') {
+		return 0, 0
+	}
+	marker := line[0]
+	length := 1
+	for length < len(line) && line[length] == marker {
+		length++
+	}
+	return marker, length
 }

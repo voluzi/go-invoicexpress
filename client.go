@@ -244,7 +244,17 @@ func (c *Client) buildURL(path string, params url.Values) string {
 // do executes an HTTP request (with retries) and decodes the JSON response
 // into v. If v is nil, the response body is discarded.
 func (c *Client) do(ctx context.Context, method, path string, params url.Values, body, v interface{}) error {
-	_, err := c.doWithStatusOpts(ctx, method, path, params, body, v, false)
+	_, err := c.doWithStatusOpts(ctx, method, path, params, body, v, false, retryByMethod)
+	return err
+}
+
+func (c *Client) doIdempotent(ctx context.Context, method, path string, params url.Values, body, v interface{}) error {
+	_, err := c.doWithStatusOpts(ctx, method, path, params, body, v, false, retryAsIdempotent)
+	return err
+}
+
+func (c *Client) doWithoutRetry(ctx context.Context, method, path string, params url.Values, body, v interface{}) error {
+	_, err := c.doWithStatusOpts(ctx, method, path, params, body, v, false, retryNever)
 	return err
 }
 
@@ -256,10 +266,18 @@ func (c *Client) do(ctx context.Context, method, path string, params url.Values,
 // otherwise an empty 202 from document creation would return a document with
 // no id, and finalization would be asked for document 0.
 func (c *Client) doWithStatus(ctx context.Context, method, path string, params url.Values, body, v interface{}) (int, error) {
-	return c.doWithStatusOpts(ctx, method, path, params, body, v, true)
+	return c.doWithStatusOpts(ctx, method, path, params, body, v, true, retryByMethod)
 }
 
-func (c *Client) doWithStatusOpts(ctx context.Context, method, path string, params url.Values, body, v interface{}, allowEmptyAccepted bool) (int, error) {
+type retryPolicy uint8
+
+const (
+	retryByMethod retryPolicy = iota
+	retryAsIdempotent
+	retryNever
+)
+
+func (c *Client) doWithStatusOpts(ctx context.Context, method, path string, params url.Values, body, v interface{}, allowEmptyAccepted bool, policy retryPolicy) (int, error) {
 	var reqBytes []byte
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -270,7 +288,8 @@ func (c *Client) doWithStatusOpts(ctx context.Context, method, path string, para
 	}
 
 	fullURL := c.buildURL(path, params)
-	idempotent := isIdempotent(method)
+	idempotent := isIdempotent(method) || policy == retryAsIdempotent
+	retriesEnabled := policy != retryNever
 
 	var lastErr error
 	for attempt := 1; ; attempt++ {
@@ -304,7 +323,7 @@ func (c *Client) doWithStatusOpts(ctx context.Context, method, path string, para
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			lastErr = fmt.Errorf("invoicexpress: do request: %w", redactAPIKey(err))
-			if idempotent && c.shouldRetry(attempt) {
+			if retriesEnabled && idempotent && c.shouldRetry(attempt) {
 				if werr := c.backoff(ctx, attempt, nil); werr != nil {
 					return 0, werr
 				}
@@ -325,7 +344,7 @@ func (c *Client) doWithStatusOpts(ctx context.Context, method, path string, para
 		_ = resp.Body.Close()
 		if readErr != nil {
 			lastErr = fmt.Errorf("invoicexpress: read response: %w", readErr)
-			if idempotent && c.shouldRetry(attempt) {
+			if retriesEnabled && idempotent && c.shouldRetry(attempt) {
 				if werr := c.backoff(ctx, attempt, nil); werr != nil {
 					return status, werr
 				}
@@ -339,7 +358,7 @@ func (c *Client) doWithStatusOpts(ctx context.Context, method, path string, para
 
 		if status >= 400 {
 			apiErr := newAPIError(status, resp.Status, redactAPIKeyBytes(respBody, c.apiKey))
-			if c.retryableStatus(status, idempotent) && c.shouldRetry(attempt) {
+			if retriesEnabled && c.retryableStatus(status, idempotent) && c.shouldRetry(attempt) {
 				if werr := c.backoff(ctx, attempt, resp); werr != nil {
 					return status, werr
 				}

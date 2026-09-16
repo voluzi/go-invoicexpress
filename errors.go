@@ -51,20 +51,28 @@ func parseErrorCode(body []byte) string {
 	if json.Unmarshal(body, &response) != nil {
 		return ""
 	}
-	rawCode := response.Code
 	if len(response.Errors) > 0 {
 		var nested struct {
 			Code json.RawMessage `json:"code"`
 		}
-		if json.Unmarshal(response.Errors, &nested) == nil && len(nested.Code) > 0 {
-			rawCode = nested.Code
+		if json.Unmarshal(response.Errors, &nested) == nil {
+			if code := decodeErrorCode(nested.Code); code != "" {
+				return code
+			}
 		}
 	}
+	return decodeErrorCode(response.Code)
+}
+
+func decodeErrorCode(rawCode json.RawMessage) string {
 	if len(rawCode) == 0 || strings.TrimSpace(string(rawCode)) == "null" {
 		return ""
 	}
 	var stringCode string
 	if json.Unmarshal(rawCode, &stringCode) == nil {
+		if strings.TrimSpace(stringCode) == "" {
+			return ""
+		}
 		return stringCode
 	}
 	return strings.TrimSpace(string(rawCode))

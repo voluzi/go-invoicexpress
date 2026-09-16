@@ -169,10 +169,12 @@ func (s *SequencesService) Create(ctx context.Context, req *SequenceCreateReques
 }
 
 // Register registers an existing sequence with the Portuguese Tax Authority.
+// It does not retry automatically because registration is a one-shot state
+// transition.
 func (s *SequencesService) Register(ctx context.Context, id int64) ([]Sequence, error) {
 	path := fmt.Sprintf("/sequences/%d/register.json", id)
 	var resp sequenceListResponse
-	if err := s.client.do(ctx, http.MethodPut, path, nil, nil, &resp); err != nil {
+	if err := s.client.doWithoutRetry(ctx, http.MethodPut, path, nil, nil, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: sequences.register: %w", err)
 	}
 	return resp.Sequences, nil

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -134,11 +135,14 @@ func TestCreatePartialPaymentDecodesReceipt(t *testing.T) {
 		_, _ = w.Write([]byte(`{"receipt":{"id":987,"status":"finalized","total":"10.00","date":"16/09/2026"}}`))
 	})
 
-	payment, err := c.Invoices.CreatePartialPayment(context.Background(), 123, &PartialPaymentRequest{
+	request := &PartialPaymentRequest{
 		PaymentMechanism: PaymentMechanismTransfer,
+		Note:             "Bank transfer",
+		Serie:            "A",
 		Amount:           NewDecimal("10.00"),
 		PaymentDate:      NewDate(time.Date(2026, 9, 16, 0, 0, 0, 0, time.UTC)),
-	})
+	}
+	payment, err := c.Invoices.CreatePartialPayment(context.Background(), 123, request)
 	if err != nil {
 		t.Fatalf("create partial payment: %v", err)
 	}
@@ -147,6 +151,12 @@ func TestCreatePartialPaymentDecodesReceipt(t *testing.T) {
 	}
 	if payment.Receipt.ID != 987 || payment.Receipt.Total.String() != "10.00" {
 		t.Fatalf("receipt = %+v, want full receipt document", payment.Receipt)
+	}
+	if payment.PaymentMechanism != request.PaymentMechanism || payment.Note != request.Note || payment.Serie != request.Serie {
+		t.Fatalf("legacy request fields = %+v", payment)
+	}
+	if payment.Amount.String() != "10.00" || payment.PaymentDate.String() != "16/09/2026" {
+		t.Fatalf("receipt-derived fields = %+v", payment)
 	}
 }
 
@@ -165,6 +175,13 @@ func TestCreatePartialPaymentRejectsMissingReceipt(t *testing.T) {
 				t.Fatalf("returned %+v, want an error", payment)
 			}
 		})
+	}
+}
+
+func TestCreatePartialPaymentRejectsNilRequest(t *testing.T) {
+	c := NewClient("acct", "key")
+	if payment, err := c.Invoices.CreatePartialPayment(context.Background(), 123, nil); !IsValidation(err) {
+		t.Fatalf("payment = %+v, error = %v, want validation error", payment, err)
 	}
 }
 
@@ -312,6 +329,29 @@ func TestClientsListInvoicesUsesPOSTWithPagination(t *testing.T) {
 	}
 }
 
+func TestClientsListInvoicesRetriesServerFailureAsReadOnlyOperation(t *testing.T) {
+	var attempts atomic.Int32
+	c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/clients/77/invoices.json" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if attempts.Add(1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte(`{"invoices":[{"id":9}],"pagination":{"current_page":1,"total_pages":1}}`))
+	})
+	c.retry = RetryConfig{MaxAttempts: 2, BaseDelay: time.Nanosecond, MaxDelay: time.Nanosecond}
+
+	invoices, _, err := c.Clients.ListInvoices(context.Background(), 77, nil)
+	if err != nil {
+		t.Fatalf("list invoices: %v", err)
+	}
+	if attempts.Load() != 2 || len(invoices) != 1 || invoices[0].ID != 9 {
+		t.Fatalf("attempts = %d, invoices = %+v", attempts.Load(), invoices)
+	}
+}
+
 func TestDocumentClientReferenceValidation(t *testing.T) {
 	references := []struct {
 		name    string
@@ -442,6 +482,39 @@ func TestGuideCreateValidationRequiresDocumentedFields(t *testing.T) {
 	}
 	if err := validGuideCreateRequest().Validate(); err != nil {
 		t.Fatalf("complete guide rejected: %v", err)
+	}
+}
+
+func TestGuideUpdateOmitsUnsetCreateOnlyFields(t *testing.T) {
+	var body string
+	c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		body = string(data)
+		w.WriteHeader(http.StatusOK)
+	})
+
+	err := c.Guides.Update(context.Background(), DocumentTypeShipping, 7, &GuideUpdateRequest{Observations: "updated"})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if body != `{"shipping":{"observations":"updated"}}` {
+		t.Fatalf("body = %s", body)
+	}
+
+	body = ""
+	err = c.Guides.Update(context.Background(), DocumentTypeShipping, 7, &GuideUpdateRequest{
+		Client:      ClientRef{ID: 42},
+		Items:       []ItemRef{},
+		AddressFrom: &AddressInfo{City: "Lisboa"},
+	})
+	if err != nil {
+		t.Fatalf("update explicit fields: %v", err)
+	}
+	if body != `{"shipping":{"address_from":{"city":"Lisboa"},"client":{"id":42},"items":[]}}` {
+		t.Fatalf("body = %s", body)
 	}
 }
 
@@ -644,6 +717,8 @@ func TestSequenceRegistrationPreservesStructuredErrorCode(t *testing.T) {
 		{name: "conflict", statusCode: http.StatusConflict, body: `{"errors":{"code":"007","message":"All Sequences are registered in AT."}}`, wantCode: "007"},
 		{name: "unprocessable", statusCode: http.StatusUnprocessableEntity, body: `{"errors":{"code":"001","message":"Sequence name not allowed."}}`, wantCode: "001"},
 		{name: "legacy top level", statusCode: http.StatusUnprocessableEntity, body: `{"code":"000","message":"Unknown error."}`, wantCode: "000"},
+		{name: "nested null falls back", statusCode: http.StatusConflict, body: `{"code":"009","errors":{"code":null,"message":"Conflict."}}`, wantCode: "009"},
+		{name: "nested blank falls back", statusCode: http.StatusUnprocessableEntity, body: `{"code":"008","errors":{"code":"  ","message":"Invalid."}}`, wantCode: "008"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -683,6 +758,26 @@ func TestSequencesRegisterRejectsMissingNullAndIDLessCollections(t *testing.T) {
 			_, err := c.Sequences.Register(context.Background(), 7)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Register error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestSequencesRegisterDoesNotRetry(t *testing.T) {
+	for _, statusCode := range []int{http.StatusInternalServerError, http.StatusTooManyRequests} {
+		t.Run(http.StatusText(statusCode), func(t *testing.T) {
+			var attempts atomic.Int32
+			c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				attempts.Add(1)
+				w.WriteHeader(statusCode)
+			})
+			c.retry = RetryConfig{MaxAttempts: 3, BaseDelay: time.Nanosecond, MaxDelay: time.Nanosecond}
+
+			if _, err := c.Sequences.Register(context.Background(), 7); err == nil {
+				t.Fatal("Register returned no error")
+			}
+			if attempts.Load() != 1 {
+				t.Fatalf("attempts = %d, want 1", attempts.Load())
 			}
 		})
 	}

@@ -2,6 +2,7 @@ package invoicexpress
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -16,6 +17,30 @@ type GuidesService struct {
 // Responses remain keyed by their concrete document type.
 type shippingWrapper struct {
 	Shipping interface{} `json:"shipping"`
+}
+
+type guideUpdatePayload struct {
+	request *GuideUpdateRequest
+}
+
+func (p guideUpdatePayload) MarshalJSON() ([]byte, error) {
+	data, err := json.Marshal(p.request)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	for name, value := range fields {
+		if string(value) == "null" {
+			delete(fields, name)
+		}
+	}
+	if client, ok := fields["client"]; ok && string(client) == "{}" {
+		delete(fields, "client")
+	}
+	return json.Marshal(fields)
 }
 
 // Create creates a new guide document. The request is validated client-side
@@ -72,7 +97,8 @@ func (s *GuidesService) List(ctx context.Context, docType DocumentType, opts *Li
 // Update updates an existing guide document.
 func (s *GuidesService) Update(ctx context.Context, docType DocumentType, id int64, req *GuideUpdateRequest) error {
 	path := fmt.Sprintf("/%s/%d.json", docType, id)
-	if err := s.client.do(ctx, http.MethodPut, path, nil, shippingWrapper{Shipping: req}, nil); err != nil {
+	body := guideUpdatePayload{request: req}
+	if err := s.client.do(ctx, http.MethodPut, path, nil, shippingWrapper{Shipping: body}, nil); err != nil {
 		return fmt.Errorf("invoicexpress: guides.update: %w", err)
 	}
 	return nil

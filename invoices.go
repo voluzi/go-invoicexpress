@@ -170,10 +170,13 @@ func (s *InvoicesService) CreatePartialPayment(ctx context.Context, id int64, re
 		return nil, fmt.Errorf("invoicexpress: invoices.create-partial-payment: receipt has no id")
 	}
 	return &PartialPayment{
-		ID:          resp.Receipt.ID,
-		Amount:      resp.Receipt.Total,
-		PaymentDate: resp.Receipt.Date,
-		Receipt:     *resp.Receipt,
+		ID:               resp.Receipt.ID,
+		Amount:           resp.Receipt.Total,
+		PaymentDate:      resp.Receipt.Date,
+		PaymentMechanism: req.PaymentMechanism,
+		Note:             req.Note,
+		Serie:            req.Serie,
+		Receipt:          *resp.Receipt,
 	}, nil
 }
 

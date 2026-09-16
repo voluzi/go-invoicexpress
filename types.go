@@ -545,5 +545,6 @@ type GuideCreateRequest struct {
 	ProprietaryUID       string       `json:"proprietary_uid,omitempty"`
 }
 
-// GuideUpdateRequest holds data for updating a guide document.
+// GuideUpdateRequest holds data for a partial guide update. Guides.Update
+// omits unset create-only fields from the request body.
 type GuideUpdateRequest = GuideCreateRequest
