@@ -66,6 +66,49 @@ func TestClientLanguageIsSentAndOmitted(t *testing.T) {
 	}
 }
 
+// A decode that fails must leave the destination as it found it. Writing `set`
+// before the token is validated leaves a rejected value looking like a set one:
+// the caller sees IsZero() false on a field it never successfully read, and
+// `omitzero` then sends it back as a write.
+func TestNullableStringRejectedTokenLeavesTheValueUntouched(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		token string
+	}{
+		{name: "number", token: `23`},
+		{name: "object", token: `{"a":1}`},
+		{name: "bool", token: `true`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Decoding into a reused struct is the case that bites: the field
+			// already holds something a failed read must not disturb.
+			n := String("en")
+			if err := n.UnmarshalJSON([]byte(tc.token)); err == nil {
+				t.Fatalf("UnmarshalJSON(%s) = nil, want an error", tc.token)
+			}
+			got, ok := n.Value()
+			if !ok || got != "en" {
+				t.Fatalf("after a failed decode the value is (%q, %v), want (\"en\", true)", got, ok)
+			}
+			if n.IsZero() {
+				t.Fatal("after a failed decode the field reports unset")
+			}
+		})
+	}
+
+	// And the mirror: an unset field stays unset rather than being flipped to
+	// set by a token that was never accepted.
+	t.Run("unset stays unset", func(t *testing.T) {
+		var n NullableString
+		if err := n.UnmarshalJSON([]byte(`23`)); err == nil {
+			t.Fatal("UnmarshalJSON(23) = nil, want an error")
+		}
+		if !n.IsZero() {
+			t.Fatal("a rejected token marked an unset field as set")
+		}
+	})
+}
+
 func TestInvoicesCreate(t *testing.T) {
 	var gotMethod, gotPath, gotAPIKey string
 	var gotBody map[string]json.RawMessage

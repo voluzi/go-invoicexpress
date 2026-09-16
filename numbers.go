@@ -61,16 +61,19 @@ func (n NullableString) MarshalJSON() ([]byte, error) {
 // absence.
 func (n *NullableString) UnmarshalJSON(data []byte) error {
 	data = bytes.TrimSpace(data)
-	n.set = true
+	// Nothing is written to the receiver until the token has been accepted. A
+	// failed decode must leave the field exactly as it found it: marking it set
+	// on the way in would make a value we refused to read look like one we
+	// read, and `omitzero` would then send it back as a write.
 	if string(data) == "null" {
-		n.value = nil
+		n.set, n.value = true, nil
 		return nil
 	}
 	var s string
 	if err := json.Unmarshal(data, &s); err != nil {
 		return fmt.Errorf("invoicexpress: cannot unmarshal %s into NullableString", data)
 	}
-	n.value = &s
+	n.set, n.value = true, &s
 	return nil
 }
 
