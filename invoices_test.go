@@ -18,12 +18,15 @@ import (
 func TestClientLanguageIsSentAndOmitted(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
-		language string
+		language NullableString
 		want     any
 		present  bool
 	}{
-		{name: "english", language: "en", want: "en", present: true},
-		{name: "unset leaves the account default", language: "", present: false},
+		{name: "english", language: String("en"), want: "en", present: true},
+		{name: "unset leaves the stored language alone", present: false},
+		// Null is how the API restores the account's own default; omitting the
+		// field would leave a client stuck in whatever it was last set to.
+		{name: "null restores the account default", language: Null(), want: nil, present: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var gotClient map[string]any

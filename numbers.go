@@ -9,6 +9,71 @@ import (
 	"strings"
 )
 
+// NullableString is a write field with three states, because two are not
+// enough for a field whose "default" is expressed as null.
+//
+// Unset is omitted from the request entirely, which leaves whatever is stored
+// alone — the API's PUT merges, so an absent field is "don't touch". Null is
+// sent as JSON null, which is how the API restores a value to the account
+// default. A value sets it.
+//
+// A plain string cannot express the middle state: the empty string either
+// marshals as "" — a literal empty value, not a default — or, with omitempty,
+// vanishes into "don't touch". Neither clears anything. A *string is no better:
+// omitempty on a nil pointer omits the field rather than writing null.
+//
+// Pair it with the `omitzero` tag, which honours IsZero; `omitempty` does not
+// and would emit null for the unset state.
+type NullableString struct {
+	set   bool
+	value *string
+}
+
+// String is a NullableString carrying v.
+func String(v string) NullableString { return NullableString{set: true, value: &v} }
+
+// Null is a NullableString that writes JSON null, restoring the stored value to
+// the account's own default.
+func Null() NullableString { return NullableString{set: true} }
+
+// IsZero reports whether the field is unset, so `omitzero` drops it from the
+// request and the stored value is left as it is.
+func (n NullableString) IsZero() bool { return !n.set }
+
+// Value returns the string and whether one was set. A set-but-null field
+// returns ("", false), the same as an unset one: neither names a value.
+func (n NullableString) Value() (string, bool) {
+	if n.value == nil {
+		return "", false
+	}
+	return *n.value, true
+}
+
+func (n NullableString) MarshalJSON() ([]byte, error) {
+	if n.value == nil {
+		return []byte("null"), nil
+	}
+	return json.Marshal(*n.value)
+}
+
+// UnmarshalJSON accepts a string or null. Both are "set": the API answering
+// null is telling us the value is the account default, which is a fact, not an
+// absence.
+func (n *NullableString) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	n.set = true
+	if string(data) == "null" {
+		n.value = nil
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return fmt.Errorf("invoicexpress: cannot unmarshal %s into NullableString", data)
+	}
+	n.value = &s
+	return nil
+}
+
 // Rate is a percentage — a tax rate, not an amount — decoded tolerantly.
 //
 // The API is inconsistent about how it writes one, for the very same field:

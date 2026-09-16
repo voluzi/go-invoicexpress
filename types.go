@@ -110,14 +110,18 @@ type ClientRef struct {
 	Phone        string `json:"phone,omitempty"`
 	Fax          string `json:"fax,omitempty"`
 	Observations string `json:"observations,omitempty"`
-	// Language the client's documents are produced in, as a two-letter code:
-	// "en" for English, empty to leave the account's own default in place.
+	// Language the client's documents are produced in, as a two-letter code.
 	//
 	// Absent from the published API reference, but the field is returned on
 	// every client read and accepted on write — an account can be seen holding
 	// a mix of "en" and null. Only values observed in use should be sent: a
 	// guess here changes the language of a legal document.
-	Language    string             `json:"language,omitempty"`
+	//
+	// Three states, because the account default is null rather than an empty
+	// string: unset leaves the stored language alone, ix.Null() restores the
+	// default, ix.String("en") sets it. A plain string could not clear one, so
+	// a client set to English would have stayed English forever.
+	Language    NullableString     `json:"language,omitzero"`
 	SendOptions *ClientSendOptions `json:"send_options,omitempty"`
 }
 
@@ -362,9 +366,11 @@ type ClientCreateRequest struct {
 	Phone        string `json:"phone,omitempty"`
 	Fax          string `json:"fax,omitempty"`
 	Observations string `json:"observations,omitempty"`
-	// Language the client's documents are produced in: "en", or empty to leave
-	// the account's default. See ClientRef.Language.
-	Language    string             `json:"language,omitempty"`
+	// Language the client's documents are produced in. See ClientRef.Language.
+	//
+	// ClientUpdateRequest aliases this type, so the three states are what let
+	// an update clear a language as well as set one.
+	Language    NullableString     `json:"language,omitzero"`
 	SendOptions *ClientSendOptions `json:"send_options,omitempty"`
 }
 
