@@ -10,6 +10,105 @@ import (
 	"time"
 )
 
+// The client's language decides what language InvoiceXpress produces the
+// document in. It is absent from the published reference but returned on every
+// client and accepted on write, so it has to survive the round trip: sent when
+// set, and omitted entirely when not, so a client keeps the account default
+// rather than being switched to an empty language.
+func TestClientLanguageIsSentAndOmitted(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		language NullableString
+		want     any
+		present  bool
+	}{
+		{name: "english", language: String("en"), want: "en", present: true},
+		{name: "unset leaves the stored language alone", present: false},
+		// Null is how the API restores the account's own default; omitting the
+		// field would leave a client stuck in whatever it was last set to.
+		{name: "null restores the account default", language: Null(), want: nil, present: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotClient map[string]any
+			c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				var body map[string]map[string]any
+				raw, _ := io.ReadAll(r.Body)
+				_ = json.Unmarshal(raw, &body)
+				gotClient, _ = body["invoice"]["client"].(map[string]any)
+				w.Write([]byte(`{"invoice":{"id":1,"status":"draft"}}`))
+			})
+
+			if _, err := c.Invoices.Create(context.Background(), DocumentTypeInvoiceReceipt, &InvoiceCreateRequest{
+				Date:   NewDate(time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)),
+				Client: ClientRef{Name: "ACME", FiscalID: "999999990", Language: tc.language},
+				Items: []ItemRef{
+					{Name: "Plano Pro", UnitPrice: NewDecimal("50"), Quantity: NewDecimal("1"), Tax: &TaxRef{Name: "IVA23"}},
+				},
+			}); err != nil {
+				t.Fatalf("create: %v", err)
+			}
+
+			// Without this the unset case passes for the wrong reason: indexing
+			// a nil map reports the key as absent, so a request that dropped
+			// the client block entirely would look identical to one that
+			// carried it with no language.
+			if gotClient == nil {
+				t.Fatalf("the request carried no invoice.client at all")
+			}
+			got, ok := gotClient["language"]
+			if ok != tc.present {
+				t.Fatalf("language present = %v, want %v (client: %v)", ok, tc.present, gotClient)
+			}
+			if tc.present && got != tc.want {
+				t.Errorf("language = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// A decode that fails must leave the destination as it found it. Writing `set`
+// before the token is validated leaves a rejected value looking like a set one:
+// the caller sees IsZero() false on a field it never successfully read, and
+// `omitzero` then sends it back as a write.
+func TestNullableStringRejectedTokenLeavesTheValueUntouched(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		token string
+	}{
+		{name: "number", token: `23`},
+		{name: "object", token: `{"a":1}`},
+		{name: "bool", token: `true`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Decoding into a reused struct is the case that bites: the field
+			// already holds something a failed read must not disturb.
+			n := String("en")
+			if err := n.UnmarshalJSON([]byte(tc.token)); err == nil {
+				t.Fatalf("UnmarshalJSON(%s) = nil, want an error", tc.token)
+			}
+			got, ok := n.Value()
+			if !ok || got != "en" {
+				t.Fatalf("after a failed decode the value is (%q, %v), want (\"en\", true)", got, ok)
+			}
+			if n.IsZero() {
+				t.Fatal("after a failed decode the field reports unset")
+			}
+		})
+	}
+
+	// And the mirror: an unset field stays unset rather than being flipped to
+	// set by a token that was never accepted.
+	t.Run("unset stays unset", func(t *testing.T) {
+		var n NullableString
+		if err := n.UnmarshalJSON([]byte(`23`)); err == nil {
+			t.Fatal("UnmarshalJSON(23) = nil, want an error")
+		}
+		if !n.IsZero() {
+			t.Fatal("a rejected token marked an unset field as set")
+		}
+	})
+}
+
 func TestInvoicesCreate(t *testing.T) {
 	var gotMethod, gotPath, gotAPIKey string
 	var gotBody map[string]json.RawMessage
