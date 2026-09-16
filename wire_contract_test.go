@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 // The payloads below are the shapes the live API actually returns, captured
@@ -194,7 +195,11 @@ func TestSynchronousCallRefusesAnEmptyAcceptedBody(t *testing.T) {
 	// 202 with no body is meaningful only to the async pollers. On an ordinary
 	// document call it must not pass: it would hand back a document with no id,
 	// and CreateAndFinalize would then finalize document 0.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	var posted bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			posted = true
+		}
 		w.WriteHeader(http.StatusAccepted)
 	}))
 	t.Cleanup(srv.Close)
@@ -203,11 +208,19 @@ func TestSynchronousCallRefusesAnEmptyAcceptedBody(t *testing.T) {
 	if doc, err := c.Invoices.Get(context.Background(), DocumentTypeInvoiceReceipt, 7); err == nil {
 		t.Fatalf("Get returned %+v on an empty 202, want an error", doc)
 	}
-	if doc, err := c.Invoices.Create(context.Background(), DocumentTypeInvoiceReceipt, &InvoiceCreateRequest{
-		Client: ClientRef{Name: "ACME"},
+
+	// The request has to be valid, or Validate() refuses it before any HTTP
+	// happens and this asserts nothing about the response handling at all.
+	doc, err := c.Invoices.Create(context.Background(), DocumentTypeInvoiceReceipt, &InvoiceCreateRequest{
+		Date:   NewDate(time.Date(2026, 9, 16, 0, 0, 0, 0, time.UTC)),
+		Client: ClientRef{Name: "ACME", FiscalID: "999999990"},
 		Items:  []ItemRef{{Name: "Pro", UnitPrice: NewDecimal("10.00"), Quantity: NewDecimal("1")}},
-	}); err == nil {
+	})
+	if err == nil {
 		t.Fatalf("Create returned %+v on an empty 202, want an error", doc)
+	}
+	if !posted {
+		t.Fatal("Create never reached the server, so this asserts nothing about the response")
 	}
 }
 
@@ -402,6 +415,10 @@ func TestRateUnmarshal(t *testing.T) {
 		{in: `"1e1"`, wantErr: true},
 		{in: `"23."`, wantErr: true},
 		{in: `".5"`, wantErr: true},
+		// ParseFloat reports overflow but underflows quietly to zero, which
+		// would arrive as a 0% rate nobody wrote.
+		{in: `1e-350`, wantErr: true},
+		{in: `1e400`, wantErr: true},
 		{in: `"23%"`, wantErr: true},
 		{in: `{}`, wantErr: true},
 		{in: `[]`, wantErr: true},

@@ -68,8 +68,24 @@ func (r *Rate) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("invoicexpress: cannot unmarshal %s into Rate", data)
 	}
+	// ParseFloat reports overflow but underflows quietly to zero: 1e-350, or a
+	// decimal with enough leading zeros, would arrive as a 0% rate that nothing
+	// wrote. Reject anything that is not actually zero but reads as zero.
+	if f == 0 && !writesZero(s) {
+		return fmt.Errorf("invoicexpress: rate %q underflows to zero", s)
+	}
 	*r = Rate(f)
 	return nil
+}
+
+// writesZero reports whether s spells the number zero ("0", "0.00", "-0").
+func writesZero(s string) bool {
+	for _, r := range s {
+		if r >= '1' && r <= '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // MarshalJSON emits a JSON number, which is what the API expects when a rate
