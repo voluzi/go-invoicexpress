@@ -1,4 +1,4 @@
-.PHONY: help test test-race cover lint fmt vet tidy check
+.PHONY: help test test-race cover lint fmt vet tidy check release-check
 
 GO ?= go
 
@@ -29,3 +29,7 @@ tidy: ## Tidy go.mod
 	$(GO) mod tidy
 
 check: fmt vet test-race ## Format, vet, and test with race
+
+release-check: ## Validate release metadata (TAG=vX.Y.Z)
+	@test -n "$(TAG)" || (echo "TAG is required (for example: TAG=v0.3.0)" >&2; exit 2)
+	@$(GO) run ./cmd/release-metadata -tag "$(TAG)"

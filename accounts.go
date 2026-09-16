@@ -22,6 +22,8 @@ type accountListResponse struct {
 }
 
 // List returns all accounts accessible to the authenticated user.
+//
+// Deprecated: InvoiceXpress does not document this endpoint.
 func (s *AccountsService) List(ctx context.Context) ([]Account, error) {
 	var resp accountListResponse
 	if err := s.client.do(ctx, http.MethodGet, "/users/accounts.json", nil, nil, &resp); err != nil {
@@ -32,7 +34,7 @@ func (s *AccountsService) List(ctx context.Context) ([]Account, error) {
 
 // Get retrieves an account by ID.
 func (s *AccountsService) Get(ctx context.Context, id int64) (*Account, error) {
-	path := fmt.Sprintf("/users/accounts/%d.json", id)
+	path := fmt.Sprintf("/api/accounts/%d/get.json", id)
 	var resp accountResponse
 	if err := s.client.do(ctx, http.MethodGet, path, nil, nil, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: accounts.get: %w", err)

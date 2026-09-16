@@ -100,7 +100,7 @@ func TestInvoicesGeneratePDFPolls(t *testing.T) {
 			w.WriteHeader(http.StatusAccepted) // 202: still generating
 			return
 		}
-		w.Write([]byte(`{"output":{"pdf_url":"https://x/inv.pdf"}}`))
+		w.Write([]byte(`{"output":{"pdfUrl":"https://x/inv.pdf"}}`))
 	})
 	url, err := c.Invoices.GeneratePDF(context.Background(), 9, time.Millisecond)
 	if err != nil {

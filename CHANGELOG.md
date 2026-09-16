@@ -6,110 +6,72 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-16
+
 ### Added
-- Repository hygiene for open-source: `SECURITY.md` (private vulnerability
-  reporting), Dependabot for GitHub Actions + Go modules, and issue/PR templates.
-- `ValidPortugueseNIF` and `Taxes.FindByName` — guards against InvoiceXpress's
-  silent fallbacks (a bad NIF degrades to "Consumidor Final"; an unknown tax
-  name applies the default rate, neither erroring).
-- `examples/draft-invoice` smoke-test command (with an opt-in `-finalize` flag).
-- Functional options for `NewClient`: `WithBaseURL`, `WithHTTPClient`,
-  `WithUserAgent`, `WithTimeout`, `WithRetry`, `WithRateLimit`.
-- Automatic retries with exponential backoff + full jitter on HTTP 429 and 5xx
-  (idempotent methods), honoring the `Retry-After` header.
-- Client-side token-bucket rate limiter (`WithRateLimit`).
-- Typed error helpers using `errors.As`: `AsAPIError`, `IsNotFound`,
-  `IsUnprocessable`, `IsRateLimited`, `IsUnauthorized`, `IsConflict`.
-- Parsing of structured validation messages from 422 bodies into `APIError.Errors`.
-- `Decimal` type for exact monetary values (no float rounding), applied to all
-  amount fields. Tolerant of JSON string or number on decode.
-- Client-side request validation (`Validate()` + `IsValidation`); `Invoices.Create`
-  validates before any network call.
-- `Invoices.CreateAndFinalize` convenience helper.
-- Per-service interfaces (`InvoicesAPI`, `ClientsAPI`, …) for mocking in consumers.
-- Default `User-Agent` carrying the library `Version`; bounded response reads.
-- Test suite (httptest), CI (build/vet/test/lint matrix), `golangci-lint` config,
-  and `Makefile`.
+- Existing clients can be referenced by ID, code, or name when creating any
+  document family.
+- Guide requests support typed loading timestamps, addresses, vehicle and
+  loading/delivery-site fields, with complete create validation.
+- Sequence creation can opt into the default sequence, existing sequences can
+  be registered with the Tax Authority, and registration metadata is decoded.
+- `SAFTExportResult.URL`, `ErrNoSAFTDocuments`, full partial-payment receipts,
+  account state fields, and structured `APIError.Code` values.
+- A tag-triggered GitHub Release workflow and dependency-free release metadata
+  checker that fail closed when the tag, version, or changelog drift.
+
+### Changed
+- Invoice create sends `proprietary_uid` beside `invoice`, as required by the
+  provider contract. Invoice updates omit it.
+- Estimate writes use the fixed `quote` envelope and guide writes use the fixed
+  `shipping` envelope for every subtype.
+- Payment mechanisms now emit the documented legal codes for cash,
+  compensation, bank checks, and checks or vouchers.
+- Sequence requests serialize `serie` and responses accept both documented
+  plural and legacy singular wrappers.
 
 ### Fixed
-- `IsNotFound` / `IsUnprocessable` now match wrapped errors (previously a type
-  assertion that always failed because services wrap with `fmt.Errorf`).
-- `Clients.ListInvoices` used `POST`; corrected to `GET`.
-- `buildURL` no longer mutates the caller's `url.Values`.
-- Removed dead code.
+- Partial payments decode the returned `receipt` and reject missing or id-less
+  legal documents.
+- PDF polling decodes `output.pdfUrl`; SAF-T export decodes top-level `url` or
+  `Url`. Completed responses without a usable URL are errors.
+- Related documents, client-name lookup, client invoice listing, and account
+  lookup use their documented method, route, envelope, and response fields.
+- Document `sequence_id` accepts string, integer, or null without losing the
+  source-compatible string field.
 
-### Fixed (review round)
-- **Security:** the `api_key` (a query parameter) could leak into a caller's logs
-  via `*url.Error` on transport failures — it's now redacted in returned errors.
-- `Decimal.MarshalJSON` now escapes via `json.Marshal` (a raw value with quotes
-  or backslashes previously produced invalid JSON).
-- `Decimal.UnmarshalJSON` no longer panics on malformed input (e.g. a lone `"`);
-  the string branch decodes via `json.Unmarshal`.
-- `Validate()` is now called by `Estimates`/`Guides`/`Clients`/`Items` `Create`
-  (previously only `Invoices.Create`), matching the documented contract.
-- Item validation now rejects a line item missing **either** unit price or
-  quantity (was `&&`, only caught both-missing).
-- **`CancelPartialPayment` was using the wrong endpoint.** Corrected to
-  `PUT /receipts/{id}/change-state.json` with the required
-  `{"receipt":{"state":"canceled","message":...}}` body. Signature changed to
-  `CancelPartialPayment(ctx, receiptID int64, message string)`.
+## [0.2.2] - 2026-09-16
 
-### Fixed (review round 2)
-- `Decimal.UnmarshalJSON` now rejects non-numeric input — booleans, objects,
-  arrays, and non-numeric strings (e.g. `"not-a-number"`) error instead of being
-  silently stored. Added `ParseDecimal(string) (Decimal, error)` and `Valid()`.
-- `CancelPartialPayment` and `ChangeState` now enforce a non-empty message
-  client-side when canceling (the API requires a reason).
-- `ItemCreateRequest.Validate` now requires `unit_price` (per the API), not just
-  name.
-- API error bodies are scrubbed of the `api_key` before being placed in
-  `APIError.Body`, in case a proxy echoes the request URL.
+### Fixed
+- Reject decimal rates that underflow to zero instead of silently treating an
+  unrepresentable rate as a real 0% tax.
 
-### Documented
-- A zero `Date` on an `omitempty` field marshals to JSON `null` (omitempty does
-  not apply to structs); InvoiceXpress treats it as an absent optional date.
-- `Update` methods do not validate (pass-through for partial updates); only
-  `Create` validates client-side. Corrected the misleading doc comment.
+## [0.2.1] - 2026-09-16
+
+### Fixed
+- Reject null tax rates, id-less documents and document-list entries, and empty
+  successful response bodies outside the asynchronous pollers.
 
 ## [0.2.0] - 2026-09-16
 
-Decoding fixes for wire shapes the API actually uses, which the published
-examples contradict. A consumer could not read a tax table at all, and document
-reads failed silently.
+### Added
+- Core InvoiceXpress services for invoices, estimates, guides, clients, items,
+  sequences, taxes, SAF-T, and accounts.
+- Exact decimal money, tolerant tax-rate and flag types, typed errors,
+  client-side validation, bounded retries, rate limiting, service interfaces,
+  examples, CI, and contributor documentation.
 
-### Changed (breaking)
-- `Tax.Value` and `TaxRef.Value` are now `Rate`; `Tax.IsDefault`,
-  `Invoice.Archived` and `Sequence.DefaultSequence` are now `Flag`. Both have
-  the expected underlying types (`float64`, `bool`), so a boolean field still
-  reads as one, but arithmetic and returns need an explicit conversion.
-- `Tax.IsDefault` is tagged `default_tax`, the key the API actually sends. The
-  previous `is_default` matched nothing, so the account-default flag had never
-  once been true.
-- `Sequence.SerieNumber` now fills from `serie` (what the API returns) as well
-  as `serie_number` (what it accepts), instead of coming back empty.
+### Changed
+- Tax and document response types reflect observed InvoiceXpress wire shapes,
+  including numeric strings, integer flags, nullable fields, and concrete
+  document-family envelopes.
 
 ### Fixed
-- **Tax rates arrive as JSON strings** (`"23.0"`) from `/taxes.json` and
-  `/items.json`, and as numbers elsewhere. `Rate` accepts both and rejects
-  anything that is not a plain decimal, so a nonsense value can never be read
-  as 0% and stamped on a document.
-- **Document responses are keyed by document type** — `{"invoice_receipt": …}`
-  and `{"invoice_receipts": […]}`, not the documented fixed `{"invoice": …}`.
-  Decoding the documented key did not error: it left the value zero, so `Get`
-  returned an empty document and `ListAll` an empty slice, both with a nil
-  error. An idempotency check that scans that list concluded "nothing exists"
-  every time and would issue a duplicate legal document.
-- A response carrying no document, a null document, an unrelated document type
-  or an error body is now an error rather than a zero-valued document.
-- `CreateAndFinalize` no longer discards the created document when the
-  state change answers without one.
-- Booleans written as `1`/`0` (`default_tax`, `default_sequence`) decode.
-
-### Note
-Request bodies deliberately keep the documented fixed key (`{"invoice": …}`).
-The docs are the only evidence about what the endpoints accept, so they were
-not changed on the strength of the response shapes.
+- Reject missing, null, ambiguous, family-mismatched, or otherwise unusable
+  document responses instead of returning zero-valued legal documents.
+- Redact API keys from transport and API errors, enforce cancellation messages,
+  and validate required item amounts without rejecting legitimate zero prices.
 
 ## [0.0.0] - initial
-- Initial implementation: invoices, estimates, guides, clients, items,
-  sequences, taxes, SAF-T, accounts; `Date` type; async PDF/SAF-T polling.
+
+- Initial implementation.

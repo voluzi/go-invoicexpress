@@ -22,6 +22,10 @@ type clientResponse struct {
 	Client Customer `json:"client"`
 }
 
+type clientLookupResponse struct {
+	Client *Customer `json:"client"`
+}
+
 // clientListResponse is the JSON response for a list of clients.
 type clientListResponse struct {
 	Clients    []Customer `json:"clients"`
@@ -69,14 +73,23 @@ func (s *ClientsService) Update(ctx context.Context, id int64, req *ClientUpdate
 	return nil
 }
 
-// FindByName searches for clients by name.
+// FindByName searches for a client by name. A successful provider response is
+// returned as exactly one element for compatibility with the existing slice
+// signature. Missing, null, or id-less successful responses are errors, as are
+// provider error responses.
 func (s *ClientsService) FindByName(ctx context.Context, name string) ([]Customer, error) {
 	params := url.Values{"client_name": []string{name}}
-	var resp clientListResponse
+	var resp clientLookupResponse
 	if err := s.client.do(ctx, http.MethodGet, "/clients/find-by-name.json", params, nil, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: clients.find-by-name: %w", err)
 	}
-	return resp.Clients, nil
+	if resp.Client == nil {
+		return nil, fmt.Errorf("invoicexpress: clients.find-by-name: response carries no client")
+	}
+	if resp.Client.ID == 0 {
+		return nil, fmt.Errorf("invoicexpress: clients.find-by-name: client has no id")
+	}
+	return []Customer{*resp.Client}, nil
 }
 
 // FindByCode searches for clients by code.
@@ -89,11 +102,12 @@ func (s *ClientsService) FindByCode(ctx context.Context, code string) (*Customer
 	return &resp.Client, nil
 }
 
-// ListInvoices returns the invoices for a specific client.
+// ListInvoices returns the invoices for a specific client. Although the
+// provider requires POST, this read-only operation uses idempotent retries.
 func (s *ClientsService) ListInvoices(ctx context.Context, clientID int64, opts *ListOptions) ([]Invoice, *PageInfo, error) {
 	path := fmt.Sprintf("/clients/%d/invoices.json", clientID)
 	resp := documentListEnvelope{docType: DocumentTypeInvoice}
-	if err := s.client.do(ctx, http.MethodGet, path, paginationParams(opts), nil, &resp); err != nil {
+	if err := s.client.doIdempotent(ctx, http.MethodPost, path, paginationParams(opts), nil, &resp); err != nil {
 		return nil, nil, fmt.Errorf("invoicexpress: clients.list-invoices: %w", err)
 	}
 	return resp.docs, &resp.page, nil

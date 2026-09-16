@@ -16,6 +16,8 @@ type APIError struct {
 	Status string
 	// Body is the raw response body.
 	Body string
+	// Code is the provider's structured error code, including leading zeroes.
+	Code string
 	// Errors holds parsed validation messages, when the body could be parsed
 	// (typically on a 422 response). Nil/empty otherwise.
 	Errors []string
@@ -36,8 +38,44 @@ func newAPIError(statusCode int, status string, body []byte) *APIError {
 		StatusCode: statusCode,
 		Status:     status,
 		Body:       string(body),
+		Code:       parseErrorCode(body),
 		Errors:     parseValidationErrors(body),
 	}
+}
+
+func parseErrorCode(body []byte) string {
+	var response struct {
+		Code   json.RawMessage `json:"code"`
+		Errors json.RawMessage `json:"errors"`
+	}
+	if json.Unmarshal(body, &response) != nil {
+		return ""
+	}
+	if len(response.Errors) > 0 {
+		var nested struct {
+			Code json.RawMessage `json:"code"`
+		}
+		if json.Unmarshal(response.Errors, &nested) == nil {
+			if code := decodeErrorCode(nested.Code); code != "" {
+				return code
+			}
+		}
+	}
+	return decodeErrorCode(response.Code)
+}
+
+func decodeErrorCode(rawCode json.RawMessage) string {
+	if len(rawCode) == 0 || strings.TrimSpace(string(rawCode)) == "null" {
+		return ""
+	}
+	var stringCode string
+	if json.Unmarshal(rawCode, &stringCode) == nil {
+		if strings.TrimSpace(stringCode) == "" {
+			return ""
+		}
+		return stringCode
+	}
+	return strings.TrimSpace(string(rawCode))
 }
 
 // parseValidationErrors extracts human-readable messages from an InvoiceXpress

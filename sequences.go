@@ -1,8 +1,10 @@
 package invoicexpress
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 )
@@ -19,7 +21,7 @@ type sequenceWrapper struct {
 
 // sequenceResponse is the JSON response for a single sequence.
 type sequenceResponse struct {
-	Sequence Sequence `json:"sequence"`
+	Sequence Sequence
 }
 
 // sequenceListResponse is the JSON response for a list of sequences.
@@ -28,10 +30,70 @@ type sequenceListResponse struct {
 	Pagination PageInfo   `json:"pagination"`
 }
 
-// UnmarshalJSON fills SerieNumber from either key the API uses for it. A
-// returned sequence names the series "serie"; the create request names the
-// same thing "serie_number". Decoding only the documented key left the series
-// silently empty on every sequence the API returned.
+func (r *sequenceListResponse) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	payload, ok := raw["sequences"]
+	if !ok {
+		return errors.New("invoicexpress: response carries no sequences")
+	}
+	if bytes.Equal(bytes.TrimSpace(payload), []byte("null")) {
+		return errors.New("invoicexpress: response carries null sequences")
+	}
+	if err := json.Unmarshal(payload, &r.Sequences); err != nil {
+		return fmt.Errorf("invoicexpress: decode sequences: %w", err)
+	}
+	for i := range r.Sequences {
+		if r.Sequences[i].ID == 0 {
+			return fmt.Errorf("invoicexpress: sequence at index %d has no id", i)
+		}
+	}
+	if pagination, ok := raw["pagination"]; ok {
+		if err := json.Unmarshal(pagination, &r.Pagination); err != nil {
+			return fmt.Errorf("invoicexpress: decode sequence pagination: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r SequenceCreateRequest) MarshalJSON() ([]byte, error) {
+	defaultSequence := ""
+	if r.DefaultSequence {
+		defaultSequence = "1"
+	}
+	return json.Marshal(struct {
+		Serie           string `json:"serie"`
+		DefaultSequence string `json:"default_sequence,omitempty"`
+	}{Serie: r.SerieNumber, DefaultSequence: defaultSequence})
+}
+
+func (r *sequenceResponse) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	payload, ok := raw["sequences"]
+	if !ok {
+		payload, ok = raw["sequence"]
+	}
+	if !ok {
+		return errors.New("invoicexpress: response carries no sequence")
+	}
+	if bytes.Equal(bytes.TrimSpace(payload), []byte("null")) {
+		return errors.New("invoicexpress: response carries a null sequence")
+	}
+	if err := json.Unmarshal(payload, &r.Sequence); err != nil {
+		return fmt.Errorf("invoicexpress: decode sequence: %w", err)
+	}
+	if r.Sequence.ID == 0 {
+		return errors.New("invoicexpress: sequence in response has no id")
+	}
+	return nil
+}
+
+// UnmarshalJSON accepts both response names used for the sequence series.
 func (s *Sequence) UnmarshalJSON(data []byte) error {
 	type sequenceFields Sequence
 	var v struct {
@@ -104,6 +166,18 @@ func (s *SequencesService) Create(ctx context.Context, req *SequenceCreateReques
 		return nil, fmt.Errorf("invoicexpress: sequences.create: %w", err)
 	}
 	return &resp.Sequence, nil
+}
+
+// Register registers an existing sequence with the Portuguese Tax Authority.
+// It does not retry automatically because registration is a one-shot state
+// transition.
+func (s *SequencesService) Register(ctx context.Context, id int64) ([]Sequence, error) {
+	path := fmt.Sprintf("/sequences/%d/register.json", id)
+	var resp sequenceListResponse
+	if err := s.client.doWithoutRetry(ctx, http.MethodPut, path, nil, nil, &resp); err != nil {
+		return nil, fmt.Errorf("invoicexpress: sequences.register: %w", err)
+	}
+	return resp.Sequences, nil
 }
 
 // SetCurrent sets a sequence as the default.

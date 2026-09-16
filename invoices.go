@@ -18,6 +18,11 @@ type invoiceWrapper struct {
 	Invoice interface{} `json:"invoice"`
 }
 
+type invoiceCreateEnvelope struct {
+	Invoice        *InvoiceCreateRequest `json:"invoice"`
+	ProprietaryUID string                `json:"proprietary_uid,omitempty"`
+}
+
 // Responses are decoded through documentEnvelope / documentListEnvelope,
 // which take the wrapper key from the document type — see documents.go.
 
@@ -30,7 +35,8 @@ func (s *InvoicesService) Create(ctx context.Context, docType DocumentType, req 
 	}
 	path := fmt.Sprintf("/%s.json", docType)
 	resp := documentEnvelope{docType: docType}
-	if err := s.client.do(ctx, http.MethodPost, path, nil, invoiceWrapper{Invoice: req}, &resp); err != nil {
+	body := invoiceCreateEnvelope{Invoice: req, ProprietaryUID: req.ProprietaryUID}
+	if err := s.client.do(ctx, http.MethodPost, path, nil, body, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: invoices.create: %w", err)
 	}
 	return &resp.doc, nil
@@ -105,7 +111,7 @@ func (s *InvoicesService) ChangeState(ctx context.Context, docType DocumentType,
 
 // RelatedDocuments returns documents related to the given invoice.
 func (s *InvoicesService) RelatedDocuments(ctx context.Context, docType DocumentType, id int64) ([]Invoice, error) {
-	path := fmt.Sprintf("/%s/%d/related-documents.json", docType, id)
+	path := fmt.Sprintf("/document/%d/related_documents.json", id)
 	resp := documentListEnvelope{docType: docType}
 	if err := s.client.do(ctx, http.MethodGet, path, nil, nil, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: invoices.related-documents: %w", err)
@@ -128,7 +134,7 @@ func (s *InvoicesService) SendByEmail(ctx context.Context, docType DocumentType,
 // pdfResponse is the JSON response for a PDF request.
 type pdfResponse struct {
 	Output struct {
-		PDFURL string `json:"pdf_url"`
+		PDFURL string `json:"pdfUrl"`
 	} `json:"output"`
 }
 
@@ -152,12 +158,26 @@ func (s *InvoicesService) CreatePartialPayment(ctx context.Context, id int64, re
 		PartialPayment *PartialPaymentRequest `json:"partial_payment"`
 	}{PartialPayment: req}
 	var resp struct {
-		PartialPayment PartialPayment `json:"partial_payment"`
+		Receipt *Invoice `json:"receipt"`
 	}
 	if err := s.client.do(ctx, http.MethodPost, path, nil, body, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: invoices.create-partial-payment: %w", err)
 	}
-	return &resp.PartialPayment, nil
+	if resp.Receipt == nil {
+		return nil, fmt.Errorf("invoicexpress: invoices.create-partial-payment: response carries no receipt")
+	}
+	if resp.Receipt.ID == 0 {
+		return nil, fmt.Errorf("invoicexpress: invoices.create-partial-payment: receipt has no id")
+	}
+	return &PartialPayment{
+		ID:               resp.Receipt.ID,
+		Amount:           resp.Receipt.Total,
+		PaymentDate:      resp.Receipt.Date,
+		PaymentMechanism: req.PaymentMechanism,
+		Note:             req.Note,
+		Serie:            req.Serie,
+		Receipt:          *resp.Receipt,
+	}, nil
 }
 
 // CancelPartialPayment cancels a partial-payment receipt by its receipt ID

@@ -50,6 +50,16 @@ func validationError(issues ...string) error {
 	return &ValidationError{Issues: cleaned}
 }
 
+func validateClientRef(client ClientRef) string {
+	if client.ID < 0 {
+		return "client.id must be positive"
+	}
+	if client.ID > 0 || strings.TrimSpace(client.Code) != "" || strings.TrimSpace(client.Name) != "" {
+		return ""
+	}
+	return "client.id, client.code, or client.name is required"
+}
+
 // Validate checks the minimum fields InvoiceXpress requires to create a
 // document, so callers don't have to round-trip to the API for a 422.
 func (r *InvoiceCreateRequest) Validate() error {
@@ -60,9 +70,7 @@ func (r *InvoiceCreateRequest) Validate() error {
 	if r.Date.IsZero() {
 		issues = append(issues, "date is required")
 	}
-	if strings.TrimSpace(r.Client.Name) == "" {
-		issues = append(issues, "client.name is required")
-	}
+	issues = append(issues, validateClientRef(r.Client))
 	if len(r.Items) == 0 {
 		issues = append(issues, "at least one item is required")
 	}
@@ -89,6 +97,26 @@ func validateItems(items []ItemRef) []string {
 	return issues
 }
 
+func validateAddress(prefix string, address *AddressInfo) []string {
+	if address == nil {
+		return []string{prefix + " is required"}
+	}
+	var issues []string
+	if strings.TrimSpace(address.Detail) == "" {
+		issues = append(issues, prefix+".detail is required")
+	}
+	if strings.TrimSpace(address.City) == "" {
+		issues = append(issues, prefix+".city is required")
+	}
+	if strings.TrimSpace(address.PostalCode) == "" {
+		issues = append(issues, prefix+".postal_code is required")
+	}
+	if strings.TrimSpace(address.Country) == "" {
+		issues = append(issues, prefix+".country is required")
+	}
+	return issues
+}
+
 // Validate checks the minimum fields required to create a guide.
 func (r *GuideCreateRequest) Validate() error {
 	var issues []string
@@ -98,13 +126,24 @@ func (r *GuideCreateRequest) Validate() error {
 	if r.Date.IsZero() {
 		issues = append(issues, "date is required")
 	}
-	if strings.TrimSpace(r.Client.Name) == "" {
-		issues = append(issues, "client.name is required")
+	if r.DueDate.IsZero() {
+		issues = append(issues, "due_date is required")
 	}
+	if r.LoadedAt.IsZero() {
+		issues = append(issues, "loaded_at is required")
+	}
+	issues = append(issues, validateClientRef(r.Client))
+	issues = append(issues, validateAddress("address_from", r.AddressFrom)...)
+	issues = append(issues, validateAddress("address_to", r.AddressTo)...)
 	if len(r.Items) == 0 {
 		issues = append(issues, "at least one item is required")
 	}
 	issues = append(issues, validateItems(r.Items)...)
+	for i, item := range r.Items {
+		if strings.TrimSpace(item.Description) == "" {
+			issues = append(issues, fmt.Sprintf("items[%d].description is required", i))
+		}
+	}
 	return validationError(issues...)
 }
 
@@ -154,9 +193,7 @@ func (r *ItemCreateRequest) Validate() error {
 	return validationError(issues...)
 }
 
-// Validate checks the minimum fields required to create a sequence. The API
-// requires a serie_number to create a sequence, so we fail fast on an empty one
-// rather than round-tripping to the API for a 422.
+// Validate checks the minimum fields required to create a sequence.
 func (r *SequenceCreateRequest) Validate() error {
 	if r == nil {
 		return &ValidationError{Issues: []string{"request is nil"}}

@@ -2,12 +2,18 @@ package invoicexpress
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
+
+// ErrNoSAFTDocuments reports that the selected period contains no documents
+// to export.
+var ErrNoSAFTDocuments = errors.New("invoicexpress: no SAF-T documents for selected period")
 
 // SAFTService handles SAF-T export operations.
 type SAFTService struct {
@@ -16,10 +22,8 @@ type SAFTService struct {
 
 // saftResponse is the JSON response for a SAF-T export.
 type saftResponse struct {
-	Output struct {
-		PDFURL string `json:"pdf_url"`
-		XMLURL string `json:"xml_url"`
-	} `json:"output"`
+	URL     string `json:"url"`
+	Message string `json:"message"`
 }
 
 // Export starts a SAF-T export and polls until it is ready.
@@ -57,10 +61,13 @@ func (s *SAFTService) Export(ctx context.Context, month, year int, pollInterval 
 				continue
 			}
 		}
-		return &SAFTExportResult{
-			PDFURL: resp.Output.PDFURL,
-			XMLURL: resp.Output.XMLURL,
-		}, nil
+		if strings.TrimSpace(resp.URL) != "" {
+			return &SAFTExportResult{URL: resp.URL}, nil
+		}
+		if strings.TrimSpace(resp.Message) != "" {
+			return nil, fmt.Errorf("%w: %s", ErrNoSAFTDocuments, resp.Message)
+		}
+		return nil, fmt.Errorf("invoicexpress: saft.export: completed response carries no URL")
 	}
 	return nil, fmt.Errorf("invoicexpress: saft.export: not ready after %d polls", maxPDFPolls)
 }
