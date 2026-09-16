@@ -10,11 +10,12 @@ import (
 
 // Rate is a percentage — a tax rate, not an amount — decoded tolerantly.
 //
-// The API is inconsistent about how it writes one: GET /taxes.json returns
-// "23.0" (a JSON string) while the tax embedded in a document returns 23.0 (a
-// JSON number). A plain float64 field decodes the second and fails the first
-// with "cannot unmarshal string into Go value of type float64", which is how a
-// tax table read can fail for an account that is perfectly well configured.
+// The API is inconsistent about how it writes one, for the very same field:
+// GET /taxes.json and GET /items.json answer "23.0" (a JSON string), while an
+// embedded document tax has been observed as 23.0 (a JSON number). A plain
+// float64 field decodes the second and fails the first with "cannot unmarshal
+// string into Go value of type float64", which is how a tax table read can fail
+// for an account that is perfectly well configured.
 //
 // Amounts keep using Decimal: they are money, and float64 rounding is not
 // acceptable on a legally-binding document. A rate is matched against a
@@ -40,6 +41,14 @@ func (r *Rate) UnmarshalJSON(data []byte) error {
 		if s == "" {
 			*r = 0
 			return nil
+		}
+		// Gate the string form exactly as Decimal does. ParseFloat alone would
+		// accept "NaN", "Inf", "0x17p0", "1_0" and "+23" — and a NaN rate
+		// compares unequal to every rate, so a caller matching the rate Stripe
+		// charged would silently find no tax and issue nothing, or stamp a
+		// nonsense percentage on a legally-binding document.
+		if !validDecimal(s) {
+			return fmt.Errorf("invoicexpress: invalid rate %q", s)
 		}
 	}
 

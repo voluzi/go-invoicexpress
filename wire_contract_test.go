@@ -36,9 +36,9 @@ func TestTaxesListDecodesTheLiveWireShape(t *testing.T) {
 	// value is a STRING, the default is "default_tax": 1 (not "is_default":
 	// true), region and code are null, and there is no pagination object.
 	const body = `{"taxes":[
-		{"id":198036,"name":"IVA23","value":"23.0","region":"PT","code":null,"default_tax":1},
-		{"id":198037,"name":"IVA18","value":"18.0","region":"PT-AC","code":null,"default_tax":0},
-		{"id":198039,"name":"Isento","value":"0.0","region":null,"code":null,"default_tax":0}
+		{"id":101,"name":"IVA23","value":"23.0","region":"PT","code":null,"default_tax":1},
+		{"id":102,"name":"IVA18","value":"18.0","region":"PT-AC","code":null,"default_tax":0},
+		{"id":103,"name":"Isento","value":"0.0","region":null,"code":null,"default_tax":0}
 	]}`
 
 	taxes, err := contractClient(t, "/taxes.json", body).Taxes.ListAll(context.Background())
@@ -82,9 +82,9 @@ func TestDocumentTaxDecodesNumericRate(t *testing.T) {
 	// The same rate is a JSON *number* when embedded in a document, which is
 	// why Rate has to accept both shapes rather than simply becoming a string.
 	const body = `{"invoice_receipt":{"id":42,"status":"settled","archived":false,
-		"type":"InvoiceReceipt","sequence_number":"1/VER","total":"12.30",
-		"items":[{"name":"Veridom Pro","unit_price":"10.00","quantity":"1.0",
-		"tax":{"id":198036,"name":"IVA23","value":23.0}}]}}`
+		"type":"InvoiceReceipt","sequence_number":"1/AA","total":"12.30",
+		"items":[{"name":"Pro plan","unit_price":"10.00","quantity":"1.0",
+		"tax":{"id":101,"name":"IVA23","value":23.0}}]}}`
 
 	inv, err := contractClient(t, "/invoice_receipts/42.json", body).
 		Invoices.Get(context.Background(), DocumentTypeInvoiceReceipt, 42)
@@ -109,10 +109,10 @@ func TestInvoiceListDecodesTheDocumentTypedKey(t *testing.T) {
 	// already-issued document concluded "none exists" every time — and issued a
 	// second legally-binding receipt on the next Stripe redelivery.
 	const body = `{"invoice_receipts":[
-		{"id":266232704,"status":"settled","sequence_number":"42/VER","total":"12.30",
-		 "proprietary_uid":"in_1UGEZhJdLj4pHYGE8dBzXoh5"},
-		{"id":266232705,"status":"draft","sequence_number":"","total":"1.23",
-		 "proprietary_uid":"in_other"}
+		{"id":501,"status":"settled","sequence_number":"42/AA","total":"12.30",
+		 "proprietary_uid":"in_test_0001"},
+		{"id":502,"status":"draft","sequence_number":"","total":"1.23",
+		 "proprietary_uid":"in_test_0002"}
 	],"pagination":{"total_entries":2,"current_page":1,"total_pages":1,"per_page":25}}`
 
 	docs, err := contractClient(t, "/invoice_receipts.json", body).
@@ -126,10 +126,10 @@ func TestInvoiceListDecodesTheDocumentTypedKey(t *testing.T) {
 
 	var found bool
 	for _, d := range docs {
-		if d.ProprietaryUID == "in_1UGEZhJdLj4pHYGE8dBzXoh5" {
+		if d.ProprietaryUID == "in_test_0001" {
 			found = true
-			if d.SequenceNumber != "42/VER" {
-				t.Errorf("SequenceNumber = %q, want 42/VER", d.SequenceNumber)
+			if d.SequenceNumber != "42/AA" {
+				t.Errorf("SequenceNumber = %q, want 42/AA", d.SequenceNumber)
 			}
 			if d.Total.String() != "12.30" {
 				t.Errorf("Total = %q, want 12.30", d.Total.String())
@@ -156,6 +156,40 @@ func TestDocumentEnvelopeAcceptsTheDocumentedKey(t *testing.T) {
 	}
 }
 
+func TestDocumentEnvelopeRefusesABodyWithNoDocument(t *testing.T) {
+	// Every caller of this envelope is owed a document. Returning a zero one
+	// with a nil error is how a finalized receipt gets issued and then not
+	// recorded — and re-issued on the next redelivery.
+	for _, body := range []string{
+		`{}`,
+		`{"invoice_receipt":null}`,
+		// A 200 that carries an error payload instead of a document.
+		`{"error":{"message":"boom"}}`,
+		// A document of another type entirely.
+		`{"credit_note":{"id":9,"type":"CreditNote"}}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			doc, err := contractClient(t, "/invoice_receipts/7.json", body).
+				Invoices.Get(context.Background(), DocumentTypeInvoiceReceipt, 7)
+			if err == nil {
+				t.Fatalf("Get returned %+v with no error, want an error", doc)
+			}
+		})
+	}
+}
+
+func TestDocumentListEnvelopeRefusesANonDocumentKey(t *testing.T) {
+	// {"errors":[…]} would otherwise decode as a list of zero-valued documents,
+	// which reads as "this account has no such document".
+	const body = `{"errors":[{"error":"nope"}],"pagination":{"total_pages":1}}`
+
+	_, err := contractClient(t, "/invoice_receipts.json", body).
+		Invoices.ListAll(context.Background(), DocumentTypeInvoiceReceipt)
+	if err == nil {
+		t.Fatal("ListAll succeeded on an error body, want an error")
+	}
+}
+
 func TestDocumentEnvelopeRefusesAnAmbiguousBody(t *testing.T) {
 	// Two plausible keys and neither is the document type: guessing would be
 	// how a wrong document gets adopted. Fail loudly instead.
@@ -171,8 +205,8 @@ func TestDocumentEnvelopeRefusesAnAmbiguousBody(t *testing.T) {
 func TestSequencesListDecodesSerieAndNumericDefault(t *testing.T) {
 	// The API returns "serie", while the create request takes "serie_number".
 	const body = `{"sequences":[
-		{"id":1184817,"serie":"A","default_sequence":1,"current_invoice_number":70},
-		{"id":1184900,"serie":"VER","default_sequence":0,"current_invoice_number":0}
+		{"id":201,"serie":"A","default_sequence":1,"current_invoice_number":70},
+		{"id":202,"serie":"BB","default_sequence":0,"current_invoice_number":0}
 	]}`
 
 	seqs, err := contractClient(t, "/sequences.json", body).Sequences.ListAll(context.Background())
@@ -188,8 +222,8 @@ func TestSequencesListDecodesSerieAndNumericDefault(t *testing.T) {
 	if !seqs[0].DefaultSequence {
 		t.Error("DefaultSequence = false, want true — \"default_sequence\": 1")
 	}
-	if seqs[1].SerieNumber != "VER" {
-		t.Errorf("SerieNumber = %q, want VER", seqs[1].SerieNumber)
+	if seqs[1].SerieNumber != "BB" {
+		t.Errorf("SerieNumber = %q, want BB", seqs[1].SerieNumber)
 	}
 	if seqs[1].DefaultSequence {
 		t.Error("DefaultSequence = true, want false")
@@ -224,6 +258,18 @@ func TestRateUnmarshal(t *testing.T) {
 		{in: `""`, want: 0},
 		{in: `"6"`, want: 6},
 		{in: `"abc"`, wantErr: true},
+		// ParseFloat would take all of these. A NaN rate is the worst of them:
+		// it compares unequal to every rate, so a caller looking for the rate
+		// that was charged silently finds no tax at all.
+		{in: `"NaN"`, wantErr: true},
+		{in: `"Inf"`, wantErr: true},
+		{in: `"+Inf"`, wantErr: true},
+		{in: `"+23"`, wantErr: true},
+		{in: `"0x17p0"`, wantErr: true},
+		{in: `"1_0"`, wantErr: true},
+		{in: `"1e1"`, wantErr: true},
+		{in: `"23."`, wantErr: true},
+		{in: `".5"`, wantErr: true},
 		{in: `"23%"`, wantErr: true},
 		{in: `{}`, wantErr: true},
 		{in: `[]`, wantErr: true},

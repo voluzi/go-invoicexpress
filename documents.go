@@ -1,11 +1,29 @@
 package invoicexpress
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 )
+
+// The sole-key fallback accepts only the GENERIC wrappers: the fixed keys the
+// documentation uses for every type in a family, plus the "document" pair for
+// endpoints (related-documents) keyed by neither the requested type nor one of
+// its own.
+//
+// It deliberately does NOT accept another specific type. Doing so would let
+// {"credit_note": …} answer a request for an invoice-receipt — adopting the
+// wrong legal document, which is worse than failing.
+var knownDocumentKeys = map[string]bool{
+	"invoice": true, "estimate": true, "guide": true, "document": true,
+}
+
+var knownDocumentListKeys = map[string]bool{
+	"invoices": true, "estimates": true, "guides": true, "documents": true,
+}
 
 // The document endpoints wrap their payload in a key named after the document
 // type: GET /invoice_receipts/42.json answers {"invoice_receipt": {...}} and
@@ -59,22 +77,35 @@ func (e *documentEnvelope) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	// An empty object carries no document. Some endpoints answer a bare {} on
-	// success; that is not an error, and there is nothing to decode.
+	// Every caller of this envelope — Create, Get, ChangeState — is owed a
+	// document. An empty body is therefore a failure, not a tolerable answer:
+	// returning nil here would hand back a zero document with a nil error,
+	// which is the silent shape this file exists to eliminate. A finalized
+	// receipt whose id never reached the caller is a legal document nothing
+	// records, and the next redelivery issues a second one.
 	if len(raw) == 0 {
-		return nil
+		return errors.New("invoicexpress: response carries no document")
 	}
 
 	key := e.docType.singularKey()
 	payload, ok := raw[key]
 	if !ok && len(raw) == 1 {
+		// One key, and it has to be a document key we recognise. Adopting
+		// whatever single object is present would let {"credit_note": …} answer
+		// a request for an invoice-receipt, or a 200 error body decode to a
+		// zero document.
 		for k, v := range raw {
-			key, payload, ok = k, v, true
+			if knownDocumentKeys[k] {
+				key, payload, ok = k, v, true
+			}
 		}
 	}
 	if !ok {
 		return fmt.Errorf("invoicexpress: response has no %q document (keys: %s)",
 			e.docType.singularKey(), strings.Join(sortedKeys(raw), ", "))
+	}
+	if string(bytes.TrimSpace(payload)) == "null" {
+		return fmt.Errorf("invoicexpress: response has a null %q document", key)
 	}
 	if err := json.Unmarshal(payload, &e.doc); err != nil {
 		return fmt.Errorf("invoicexpress: decode %q: %w", key, err)
@@ -109,14 +140,16 @@ func (e *documentListEnvelope) UnmarshalJSON(data []byte) error {
 	key := string(e.docType)
 	payload, ok := raw[key]
 	if !ok {
-		// The only other key, ignoring pagination.
+		// The only other key, ignoring pagination — and only if it names
+		// documents. An error body like {"errors":[…]} would otherwise decode
+		// to a list of zero-valued documents.
 		var candidates []string
 		for k := range raw {
 			if k != "pagination" {
 				candidates = append(candidates, k)
 			}
 		}
-		if len(candidates) == 1 {
+		if len(candidates) == 1 && knownDocumentListKeys[candidates[0]] {
 			key, payload, ok = candidates[0], raw[candidates[0]], true
 		}
 	}

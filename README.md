@@ -80,10 +80,10 @@ amount.Float64()                // for display/aggregation only
 
 `Decimal` decodes from either a JSON string (`"29.99"`) or number (`29.99`).
 Tax *rates* (percentages) are `Rate`, whose underlying type is `float64`; it
-decodes from either shape too, because the API returns `"23.0"` from
-`/taxes.json` and `23.0` for the same rate embedded in a document. Booleans
-are `Flag` (underlying type `bool`) for the same reason: the API writes some
-of them as `1`/`0`.
+decodes from either shape too, because the API is inconsistent about which it
+uses for the same field — `/taxes.json` answers `"23.0"` while an embedded
+document tax has been observed as `23.0`. Booleans are `Flag` (underlying type
+`bool`) for the same reason: the API writes some of them as `1`/`0`.
 
 ## Errors
 
@@ -138,7 +138,9 @@ Known limitations (PRs welcome):
   beyond the common set are not yet modeled.
 - **Invoices are never deleted** — Portuguese law forbids deleting a finalized
   document. Cancel instead via `ChangeState(..., StateCanceled, reason)`.
-- **Monetary amounts use `Decimal`; tax rates/percentages use `float64`.**
+- **Monetary amounts use `Decimal`; tax rates/percentages use `Rate`** (underlying
+  type `float64`). Both decode from a JSON string or a number, because the API
+  uses both shapes for the same field depending on the endpoint.
 - Validation-error parsing from 422 bodies is best-effort across the shapes the
   API has used; the raw body is always available in `APIError.Body`.
 - This client does not compute VAT. For cross-border EU VAT (per-country rates,

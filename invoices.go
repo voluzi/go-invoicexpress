@@ -48,6 +48,12 @@ func (s *InvoicesService) CreateAndFinalize(ctx context.Context, docType Documen
 	if err != nil {
 		return inv, fmt.Errorf("invoicexpress: invoices.create-and-finalize: created id=%d but finalize failed: %w", inv.ID, err)
 	}
+	if finalized == nil || finalized.ID == 0 {
+		// The state change reported success but named no document. The one we
+		// created is what exists; returning the empty answer instead would lose
+		// the id of a document that has just been legally issued.
+		return inv, nil
+	}
 	return finalized, nil
 }
 

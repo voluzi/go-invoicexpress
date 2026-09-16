@@ -71,6 +71,45 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `Update` methods do not validate (pass-through for partial updates); only
   `Create` validates client-side. Corrected the misleading doc comment.
 
+## [0.2.0] - 2026-09-16
+
+Decoding fixes for wire shapes the API actually uses, which the published
+examples contradict. A consumer could not read a tax table at all, and document
+reads failed silently.
+
+### Changed (breaking)
+- `Tax.Value` and `TaxRef.Value` are now `Rate`; `Tax.IsDefault`,
+  `Invoice.Archived` and `Sequence.DefaultSequence` are now `Flag`. Both have
+  the expected underlying types (`float64`, `bool`), so a boolean field still
+  reads as one, but arithmetic and returns need an explicit conversion.
+- `Tax.IsDefault` is tagged `default_tax`, the key the API actually sends. The
+  previous `is_default` matched nothing, so the account-default flag had never
+  once been true.
+- `Sequence.SerieNumber` now fills from `serie` (what the API returns) as well
+  as `serie_number` (what it accepts), instead of coming back empty.
+
+### Fixed
+- **Tax rates arrive as JSON strings** (`"23.0"`) from `/taxes.json` and
+  `/items.json`, and as numbers elsewhere. `Rate` accepts both and rejects
+  anything that is not a plain decimal, so a nonsense value can never be read
+  as 0% and stamped on a document.
+- **Document responses are keyed by document type** — `{"invoice_receipt": …}`
+  and `{"invoice_receipts": […]}`, not the documented fixed `{"invoice": …}`.
+  Decoding the documented key did not error: it left the value zero, so `Get`
+  returned an empty document and `ListAll` an empty slice, both with a nil
+  error. An idempotency check that scans that list concluded "nothing exists"
+  every time and would issue a duplicate legal document.
+- A response carrying no document, a null document, an unrelated document type
+  or an error body is now an error rather than a zero-valued document.
+- `CreateAndFinalize` no longer discards the created document when the
+  state change answers without one.
+- Booleans written as `1`/`0` (`default_tax`, `default_sequence`) decode.
+
+### Note
+Request bodies deliberately keep the documented fixed key (`{"invoice": …}`).
+The docs are the only evidence about what the endpoints accept, so they were
+not changed on the strength of the response shapes.
+
 ## [0.0.0] - initial
 - Initial implementation: invoices, estimates, guides, clients, items,
   sequences, taxes, SAF-T, accounts; `Date` type; async PDF/SAF-T polling.

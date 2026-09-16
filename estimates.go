@@ -45,6 +45,9 @@ func (s *EstimatesService) CreateAndFinalize(ctx context.Context, docType Docume
 	if err != nil {
 		return est, fmt.Errorf("invoicexpress: estimates.create-and-finalize: created id=%d but finalize failed: %w", est.ID, err)
 	}
+	if finalized == nil || finalized.ID == 0 {
+		return est, nil
+	}
 	return finalized, nil
 }
 

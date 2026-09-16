@@ -45,6 +45,9 @@ func (s *GuidesService) CreateAndFinalize(ctx context.Context, docType DocumentT
 	if err != nil {
 		return guide, fmt.Errorf("invoicexpress: guides.create-and-finalize: created id=%d but finalize failed: %w", guide.ID, err)
 	}
+	if finalized == nil || finalized.ID == 0 {
+		return guide, nil
+	}
 	return finalized, nil
 }
 

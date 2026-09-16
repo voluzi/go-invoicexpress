@@ -67,8 +67,8 @@ type PageInfo struct {
 type TaxRef struct {
 	ID   int64  `json:"id,omitempty"`
 	Name string `json:"name,omitempty"`
-	// Value is a Rate, not a float64: a document embeds its tax as a JSON
-	// number while /taxes.json returns a string for the same field.
+	// Value is a Rate, not a float64: the API writes this field as a JSON
+	// string on some endpoints and a number on others.
 	Value Rate `json:"value,omitempty"`
 }
 
