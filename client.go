@@ -339,7 +339,22 @@ func (c *Client) doWithStatus(ctx context.Context, method, path string, params u
 			return status, apiErr
 		}
 
-		if v != nil && len(respBody) > 0 {
+		if v != nil {
+			// A caller that passed a destination is expecting a payload, and
+			// every endpoint that answers without one is called with v == nil.
+			// Skipping the decode here instead would hand back a zero value and
+			// a nil error — a created document with no id, or an empty list
+			// that reads as "this account has none".
+			//
+			// 202 is the exception, and the reason doWithStatus exists: the
+			// async PDF and SAF-T endpoints answer it with no body while the
+			// file is still being generated, and the caller polls on.
+			if len(respBody) == 0 && status != http.StatusAccepted {
+				return status, fmt.Errorf("invoicexpress: %s answered %d with an empty body", path, status)
+			}
+			if len(respBody) == 0 {
+				return status, nil
+			}
 			if err := json.Unmarshal(respBody, v); err != nil {
 				return status, fmt.Errorf("invoicexpress: decode response: %w", err)
 			}

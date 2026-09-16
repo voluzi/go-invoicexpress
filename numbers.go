@@ -3,6 +3,7 @@ package invoicexpress
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -39,8 +40,11 @@ func (r *Rate) UnmarshalJSON(data []byte) error {
 		}
 		s = strings.TrimSpace(s)
 		if s == "" {
-			*r = 0
-			return nil
+			// A blank rate is not 0%. The API writes an explicit "0.0" for a
+			// zero-rated tax, so a blank is something unexpected — and reading
+			// it as zero would let a caller matching on the rate pick this tax
+			// for an untaxed line.
+			return errors.New("invoicexpress: cannot unmarshal an empty string into Rate")
 		}
 		// Gate the string form exactly as Decimal does. ParseFloat alone would
 		// accept "NaN", "Inf", "0x17p0", "1_0" and "+23" — and a NaN rate

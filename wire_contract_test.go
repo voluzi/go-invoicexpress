@@ -178,6 +178,82 @@ func TestDocumentEnvelopeRefusesABodyWithNoDocument(t *testing.T) {
 	}
 }
 
+func TestDocumentEnvelopeRefusesAnEmptyResponseBody(t *testing.T) {
+	// A 200 with no body at all never reaches the envelope — the client skipped
+	// decoding when there was nothing to decode, and handed back a zero
+	// document with a nil error. CreateAndFinalize then asked the API to
+	// finalize document id 0.
+	_, err := contractClient(t, "/invoice_receipts/7.json", "").
+		Invoices.Get(context.Background(), DocumentTypeInvoiceReceipt, 7)
+	if err == nil {
+		t.Fatal("Get succeeded on an empty body, want an error")
+	}
+}
+
+func TestDocumentEnvelopeRefusesAWrapperWithoutAnID(t *testing.T) {
+	for _, body := range []string{
+		`{"invoice_receipt":{}}`,
+		`{"invoice_receipt":{"error":"failed"}}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			doc, err := contractClient(t, "/invoice_receipts/7.json", body).
+				Invoices.Get(context.Background(), DocumentTypeInvoiceReceipt, 7)
+			if err == nil {
+				t.Fatalf("Get returned %+v with no error, want an error", doc)
+			}
+		})
+	}
+}
+
+func TestDocumentEnvelopeRefusesAnotherFamilysWrapper(t *testing.T) {
+	// "estimate" is a documented generic wrapper, but for quotes — not for a
+	// legal invoice-receipt. Adopting it would file a quote as a receipt.
+	_, err := contractClient(t, "/invoice_receipts/9.json", `{"estimate":{"id":9,"type":"Quote"}}`).
+		Invoices.Get(context.Background(), DocumentTypeInvoiceReceipt, 9)
+	if err == nil {
+		t.Fatal("Get accepted an estimate wrapper for an invoice-receipt, want an error")
+	}
+
+	_, listErr := contractClient(t, "/invoice_receipts.json", `{"guides":[{"id":9}]}`).
+		Invoices.ListAll(context.Background(), DocumentTypeInvoiceReceipt)
+	if listErr == nil {
+		t.Fatal("ListAll accepted a guides list for invoice-receipts, want an error")
+	}
+}
+
+func TestDocumentListRefusesAMissingCollection(t *testing.T) {
+	// The read an idempotency check depends on. "No documents, no error" is how
+	// a caller concludes a receipt it already issued does not exist — and
+	// issues a second legally-binding one.
+	for _, body := range []string{
+		`{}`,
+		`{"pagination":{"total_entries":10,"total_pages":1,"current_page":1,"per_page":25}}`,
+		`{"invoice_receipts":null}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			docs, err := contractClient(t, "/invoice_receipts.json", body).
+				Invoices.ListAll(context.Background(), DocumentTypeInvoiceReceipt)
+			if err == nil {
+				t.Fatalf("ListAll returned %d documents with no error, want an error", len(docs))
+			}
+		})
+	}
+}
+
+func TestDocumentListAcceptsAGenuinelyEmptyCollection(t *testing.T) {
+	// The flip side: an account with none must still be an empty list, not an
+	// error, or a first issuance could never happen.
+	docs, err := contractClient(t, "/invoice_receipts.json",
+		`{"invoice_receipts":[],"pagination":{"total_entries":0,"total_pages":0,"current_page":1,"per_page":25}}`).
+		Invoices.ListAll(context.Background(), DocumentTypeInvoiceReceipt)
+	if err != nil {
+		t.Fatalf("ListAll on an empty account: %v", err)
+	}
+	if len(docs) != 0 {
+		t.Fatalf("got %d documents, want 0", len(docs))
+	}
+}
+
 func TestDocumentListEnvelopeRefusesANonDocumentKey(t *testing.T) {
 	// {"errors":[…]} would otherwise decode as a list of zero-valued documents,
 	// which reads as "this account has no such document".
@@ -255,8 +331,11 @@ func TestRateUnmarshal(t *testing.T) {
 		{in: `0`, want: 0},
 		{in: `"0.0"`, want: 0},
 		{in: `null`, want: 0},
-		{in: `""`, want: 0},
 		{in: `"6"`, want: 6},
+		// A blank rate is not a zero rate: the API writes "0.0" for zero-rated
+		// tax, so blank is something unexpected and must not be read as 0%.
+		{in: `""`, wantErr: true},
+		{in: `"   "`, wantErr: true},
 		{in: `"abc"`, wantErr: true},
 		// ParseFloat would take all of these. A NaN rate is the worst of them:
 		// it compares unequal to every rate, so a caller looking for the rate

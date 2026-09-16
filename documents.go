@@ -9,20 +9,31 @@ import (
 	"strings"
 )
 
-// The sole-key fallback accepts only the GENERIC wrappers: the fixed keys the
-// documentation uses for every type in a family, plus the "document" pair for
-// endpoints (related-documents) keyed by neither the requested type nor one of
-// its own.
-//
-// It deliberately does NOT accept another specific type. Doing so would let
-// {"credit_note": …} answer a request for an invoice-receipt — adopting the
-// wrong legal document, which is worse than failing.
-var knownDocumentKeys = map[string]bool{
-	"invoice": true, "estimate": true, "guide": true, "document": true,
+// family is the documented generic wrapper for this document type's family:
+// "invoice" for invoices, simplified invoices, receipts and notes; "estimate"
+// for quotes, proformas and fees notes; "guide" for transport documents.
+func (d DocumentType) family() string {
+	switch d {
+	case DocumentTypeQuote, DocumentTypeProforma, DocumentTypeFeesNote:
+		return "estimate"
+	case DocumentTypeShipping, DocumentTypeTransport, DocumentTypeDevolution:
+		return "guide"
+	default:
+		return "invoice"
+	}
 }
 
-var knownDocumentListKeys = map[string]bool{
-	"invoices": true, "estimates": true, "guides": true, "documents": true,
+// fallbackKeys are the wrapper names accepted when the document type's own key
+// is absent: the documented generic wrapper for ITS OWN family, plus the
+// "document" pair that related-documents uses.
+//
+// Family matters. A flat list of generic wrappers would let {"estimate": …}
+// answer a request for an invoice-receipt, adopting a quote as a legal
+// document — and refusing is always better than adopting the wrong one.
+func (d DocumentType) fallbackKeys() (single, plural map[string]bool) {
+	f := d.family()
+	return map[string]bool{f: true, "document": true},
+		map[string]bool{f + "s": true, "documents": true}
 }
 
 // The document endpoints wrap their payload in a key named after the document
@@ -90,12 +101,13 @@ func (e *documentEnvelope) UnmarshalJSON(data []byte) error {
 	key := e.docType.singularKey()
 	payload, ok := raw[key]
 	if !ok && len(raw) == 1 {
-		// One key, and it has to be a document key we recognise. Adopting
-		// whatever single object is present would let {"credit_note": …} answer
-		// a request for an invoice-receipt, or a 200 error body decode to a
-		// zero document.
+		// One key, and it has to be a wrapper for this document's own family.
+		// Adopting whatever single object is present would let {"credit_note":
+		// …} answer a request for an invoice-receipt, or a 200 error body
+		// decode to a zero document.
+		accepted, _ := e.docType.fallbackKeys()
 		for k, v := range raw {
-			if knownDocumentKeys[k] {
+			if accepted[k] {
 				key, payload, ok = k, v, true
 			}
 		}
@@ -109,6 +121,12 @@ func (e *documentEnvelope) UnmarshalJSON(data []byte) error {
 	}
 	if err := json.Unmarshal(payload, &e.doc); err != nil {
 		return fmt.Errorf("invoicexpress: decode %q: %w", key, err)
+	}
+	// A wrapper with nothing usable in it — {"invoice_receipt":{}} or a payload
+	// carrying an error instead of a document — is the same silent zero as an
+	// absent key, and loses the identity of a document that may already exist.
+	if e.doc.ID == 0 {
+		return fmt.Errorf("invoicexpress: %q in the response has no id", key)
 	}
 	return nil
 }
@@ -127,8 +145,13 @@ func (e *documentListEnvelope) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
+	// An absent collection is NOT an empty one. This is the read an idempotency
+	// check depends on: "no documents, no error" is how a caller concludes that
+	// a receipt it already issued does not exist, and issues it a second time.
+	// A genuinely empty account answers {"invoice_receipts":[]}, which decodes
+	// to an empty slice here — the difference is the whole point.
 	if len(raw) == 0 {
-		return nil
+		return errors.New("invoicexpress: response carries no document list")
 	}
 
 	if p, ok := raw["pagination"]; ok {
@@ -141,24 +164,25 @@ func (e *documentListEnvelope) UnmarshalJSON(data []byte) error {
 	payload, ok := raw[key]
 	if !ok {
 		// The only other key, ignoring pagination — and only if it names
-		// documents. An error body like {"errors":[…]} would otherwise decode
-		// to a list of zero-valued documents.
+		// documents of this document's own family. An error body like
+		// {"errors":[…]} would otherwise decode to a list of zero documents.
+		_, accepted := e.docType.fallbackKeys()
 		var candidates []string
 		for k := range raw {
 			if k != "pagination" {
 				candidates = append(candidates, k)
 			}
 		}
-		if len(candidates) == 1 && knownDocumentListKeys[candidates[0]] {
+		if len(candidates) == 1 && accepted[candidates[0]] {
 			key, payload, ok = candidates[0], raw[candidates[0]], true
 		}
 	}
 	if !ok {
-		if _, paginationOnly := raw["pagination"]; paginationOnly && len(raw) == 1 {
-			return nil
-		}
 		return fmt.Errorf("invoicexpress: response has no %q list (keys: %s)",
 			string(e.docType), strings.Join(sortedKeys(raw), ", "))
+	}
+	if string(bytes.TrimSpace(payload)) == "null" {
+		return fmt.Errorf("invoicexpress: response has a null %q list", key)
 	}
 	if err := json.Unmarshal(payload, &e.docs); err != nil {
 		return fmt.Errorf("invoicexpress: decode %q: %w", key, err)
