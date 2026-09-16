@@ -2,6 +2,7 @@ package invoicexpress
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 )
@@ -25,6 +26,26 @@ type sequenceResponse struct {
 type sequenceListResponse struct {
 	Sequences  []Sequence `json:"sequences"`
 	Pagination PageInfo   `json:"pagination"`
+}
+
+// UnmarshalJSON fills SerieNumber from either key the API uses for it. A
+// returned sequence names the series "serie"; the create request names the
+// same thing "serie_number". Decoding only the documented key left the series
+// silently empty on every sequence the API returned.
+func (s *Sequence) UnmarshalJSON(data []byte) error {
+	type sequenceFields Sequence
+	var v struct {
+		sequenceFields
+		Serie string `json:"serie"`
+	}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	*s = Sequence(v.sequenceFields)
+	if v.Serie != "" {
+		s.SerieNumber = v.Serie
+	}
+	return nil
 }
 
 // List returns the first page of sequences. Use ListPage to control pagination

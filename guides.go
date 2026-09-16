@@ -12,20 +12,12 @@ type GuidesService struct {
 	client *Client
 }
 
-// guideWrapper is used for JSON serialization of guide requests.
+// guideWrapper is used for JSON serialization of guide requests, under the
+// fixed key the API documents. Responses are keyed by document type instead —
+// a transport guide comes back as {"transport": {...}} / {"transports": [...]}
+// — so they decode through documentEnvelope; see documents.go.
 type guideWrapper struct {
 	Guide interface{} `json:"guide"`
-}
-
-// guideResponse is the JSON response for a single guide.
-type guideResponse struct {
-	Guide Guide `json:"guide"`
-}
-
-// guideListResponse is the JSON response for a list of guides.
-type guideListResponse struct {
-	Guides     []Guide  `json:"guides"`
-	Pagination PageInfo `json:"pagination"`
 }
 
 // Create creates a new guide document. The request is validated client-side
@@ -35,11 +27,11 @@ func (s *GuidesService) Create(ctx context.Context, docType DocumentType, req *G
 		return nil, err
 	}
 	path := fmt.Sprintf("/%s.json", docType)
-	var resp guideResponse
+	resp := documentEnvelope{docType: docType}
 	if err := s.client.do(ctx, http.MethodPost, path, nil, guideWrapper{Guide: req}, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: guides.create: %w", err)
 	}
-	return &resp.Guide, nil
+	return &resp.doc, nil
 }
 
 // CreateAndFinalize creates a guide document and immediately transitions it to
@@ -59,21 +51,21 @@ func (s *GuidesService) CreateAndFinalize(ctx context.Context, docType DocumentT
 // Get retrieves a guide document by ID.
 func (s *GuidesService) Get(ctx context.Context, docType DocumentType, id int64) (*Guide, error) {
 	path := fmt.Sprintf("/%s/%d.json", docType, id)
-	var resp guideResponse
+	resp := documentEnvelope{docType: docType}
 	if err := s.client.do(ctx, http.MethodGet, path, nil, nil, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: guides.get: %w", err)
 	}
-	return &resp.Guide, nil
+	return &resp.doc, nil
 }
 
 // List returns a paginated list of guide documents.
 func (s *GuidesService) List(ctx context.Context, docType DocumentType, opts *ListOptions) ([]Guide, *PageInfo, error) {
 	path := fmt.Sprintf("/%s.json", docType)
-	var resp guideListResponse
+	resp := documentListEnvelope{docType: docType}
 	if err := s.client.do(ctx, http.MethodGet, path, paginationParams(opts), nil, &resp); err != nil {
 		return nil, nil, fmt.Errorf("invoicexpress: guides.list: %w", err)
 	}
-	return resp.Guides, &resp.Pagination, nil
+	return resp.docs, &resp.page, nil
 }
 
 // Update updates an existing guide document.
@@ -95,11 +87,11 @@ func (s *GuidesService) ChangeState(ctx context.Context, docType DocumentType, i
 	body := struct {
 		Guide ChangeStateRequest `json:"guide"`
 	}{Guide: ChangeStateRequest{State: state, Message: message}}
-	var resp guideResponse
+	resp := documentEnvelope{docType: docType}
 	if err := s.client.do(ctx, http.MethodPut, path, nil, body, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: guides.change-state: %w", err)
 	}
-	return &resp.Guide, nil
+	return &resp.doc, nil
 }
 
 // SendByEmail sends a guide document by email.

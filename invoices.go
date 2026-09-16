@@ -12,21 +12,14 @@ type InvoicesService struct {
 	client *Client
 }
 
-// invoiceWrapper is used for JSON serialization of invoice requests.
+// invoiceWrapper is used for JSON serialization of invoice requests. The API
+// documents this fixed key for every document type, unlike its responses.
 type invoiceWrapper struct {
 	Invoice interface{} `json:"invoice"`
 }
 
-// invoiceResponse is the JSON response for a single invoice.
-type invoiceResponse struct {
-	Invoice Invoice `json:"invoice"`
-}
-
-// invoiceListResponse is the JSON response for a list of invoices.
-type invoiceListResponse struct {
-	Invoices   []Invoice `json:"invoices"`
-	Pagination PageInfo  `json:"pagination"`
-}
+// Responses are decoded through documentEnvelope / documentListEnvelope,
+// which take the wrapper key from the document type — see documents.go.
 
 // Create creates a new invoice document of the given type. The request is
 // validated client-side first, so obvious mistakes fail fast without a
@@ -36,11 +29,11 @@ func (s *InvoicesService) Create(ctx context.Context, docType DocumentType, req 
 		return nil, err
 	}
 	path := fmt.Sprintf("/%s.json", docType)
-	var resp invoiceResponse
+	resp := documentEnvelope{docType: docType}
 	if err := s.client.do(ctx, http.MethodPost, path, nil, invoiceWrapper{Invoice: req}, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: invoices.create: %w", err)
 	}
-	return &resp.Invoice, nil
+	return &resp.doc, nil
 }
 
 // CreateAndFinalize creates an invoice document and immediately transitions it
@@ -61,21 +54,21 @@ func (s *InvoicesService) CreateAndFinalize(ctx context.Context, docType Documen
 // Get retrieves an invoice document by ID.
 func (s *InvoicesService) Get(ctx context.Context, docType DocumentType, id int64) (*Invoice, error) {
 	path := fmt.Sprintf("/%s/%d.json", docType, id)
-	var resp invoiceResponse
+	resp := documentEnvelope{docType: docType}
 	if err := s.client.do(ctx, http.MethodGet, path, nil, nil, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: invoices.get: %w", err)
 	}
-	return &resp.Invoice, nil
+	return &resp.doc, nil
 }
 
 // List returns a paginated list of invoice documents.
 func (s *InvoicesService) List(ctx context.Context, docType DocumentType, opts *ListOptions) ([]Invoice, *PageInfo, error) {
 	path := fmt.Sprintf("/%s.json", docType)
-	var resp invoiceListResponse
+	resp := documentListEnvelope{docType: docType}
 	if err := s.client.do(ctx, http.MethodGet, path, paginationParams(opts), nil, &resp); err != nil {
 		return nil, nil, fmt.Errorf("invoicexpress: invoices.list: %w", err)
 	}
-	return resp.Invoices, &resp.Pagination, nil
+	return resp.docs, &resp.page, nil
 }
 
 // Update updates an existing invoice document.
@@ -97,21 +90,21 @@ func (s *InvoicesService) ChangeState(ctx context.Context, docType DocumentType,
 	body := struct {
 		Invoice ChangeStateRequest `json:"invoice"`
 	}{Invoice: ChangeStateRequest{State: state, Message: message}}
-	var resp invoiceResponse
+	resp := documentEnvelope{docType: docType}
 	if err := s.client.do(ctx, http.MethodPut, path, nil, body, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: invoices.change-state: %w", err)
 	}
-	return &resp.Invoice, nil
+	return &resp.doc, nil
 }
 
 // RelatedDocuments returns documents related to the given invoice.
 func (s *InvoicesService) RelatedDocuments(ctx context.Context, docType DocumentType, id int64) ([]Invoice, error) {
 	path := fmt.Sprintf("/%s/%d/related-documents.json", docType, id)
-	var resp invoiceListResponse
+	resp := documentListEnvelope{docType: docType}
 	if err := s.client.do(ctx, http.MethodGet, path, nil, nil, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: invoices.related-documents: %w", err)
 	}
-	return resp.Invoices, nil
+	return resp.docs, nil
 }
 
 // SendByEmail sends a document by email.

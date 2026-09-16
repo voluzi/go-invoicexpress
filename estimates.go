@@ -12,20 +12,12 @@ type EstimatesService struct {
 	client *Client
 }
 
-// estimateWrapper is used for JSON serialization of estimate requests.
+// estimateWrapper is used for JSON serialization of estimate requests, under
+// the fixed key the API documents. Responses are keyed by document type
+// instead — a quote comes back as {"quote": {...}} / {"quotes": [...]} — so
+// they decode through documentEnvelope; see documents.go.
 type estimateWrapper struct {
 	Estimate interface{} `json:"estimate"`
-}
-
-// estimateResponse is the JSON response for a single estimate.
-type estimateResponse struct {
-	Estimate Estimate `json:"estimate"`
-}
-
-// estimateListResponse is the JSON response for a list of estimates.
-type estimateListResponse struct {
-	Estimates  []Estimate `json:"estimates"`
-	Pagination PageInfo   `json:"pagination"`
 }
 
 // Create creates a new estimate document. The request is validated client-side
@@ -35,11 +27,11 @@ func (s *EstimatesService) Create(ctx context.Context, docType DocumentType, req
 		return nil, err
 	}
 	path := fmt.Sprintf("/%s.json", docType)
-	var resp estimateResponse
+	resp := documentEnvelope{docType: docType}
 	if err := s.client.do(ctx, http.MethodPost, path, nil, estimateWrapper{Estimate: req}, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: estimates.create: %w", err)
 	}
-	return &resp.Estimate, nil
+	return &resp.doc, nil
 }
 
 // CreateAndFinalize creates an estimate document and immediately transitions it
@@ -59,21 +51,21 @@ func (s *EstimatesService) CreateAndFinalize(ctx context.Context, docType Docume
 // Get retrieves an estimate document by ID.
 func (s *EstimatesService) Get(ctx context.Context, docType DocumentType, id int64) (*Estimate, error) {
 	path := fmt.Sprintf("/%s/%d.json", docType, id)
-	var resp estimateResponse
+	resp := documentEnvelope{docType: docType}
 	if err := s.client.do(ctx, http.MethodGet, path, nil, nil, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: estimates.get: %w", err)
 	}
-	return &resp.Estimate, nil
+	return &resp.doc, nil
 }
 
 // List returns a paginated list of estimate documents.
 func (s *EstimatesService) List(ctx context.Context, docType DocumentType, opts *ListOptions) ([]Estimate, *PageInfo, error) {
 	path := fmt.Sprintf("/%s.json", docType)
-	var resp estimateListResponse
+	resp := documentListEnvelope{docType: docType}
 	if err := s.client.do(ctx, http.MethodGet, path, paginationParams(opts), nil, &resp); err != nil {
 		return nil, nil, fmt.Errorf("invoicexpress: estimates.list: %w", err)
 	}
-	return resp.Estimates, &resp.Pagination, nil
+	return resp.docs, &resp.page, nil
 }
 
 // Update updates an existing estimate document.
@@ -95,11 +87,11 @@ func (s *EstimatesService) ChangeState(ctx context.Context, docType DocumentType
 	body := struct {
 		Estimate ChangeStateRequest `json:"estimate"`
 	}{Estimate: ChangeStateRequest{State: state, Message: message}}
-	var resp estimateResponse
+	resp := documentEnvelope{docType: docType}
 	if err := s.client.do(ctx, http.MethodPut, path, nil, body, &resp); err != nil {
 		return nil, fmt.Errorf("invoicexpress: estimates.change-state: %w", err)
 	}
-	return &resp.Estimate, nil
+	return &resp.doc, nil
 }
 
 // SendByEmail sends an estimate document by email.

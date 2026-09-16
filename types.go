@@ -65,9 +65,11 @@ type PageInfo struct {
 
 // TaxRef is a reference to a tax by name.
 type TaxRef struct {
-	ID    int64   `json:"id,omitempty"`
-	Name  string  `json:"name,omitempty"`
-	Value float64 `json:"value,omitempty"`
+	ID   int64  `json:"id,omitempty"`
+	Name string `json:"name,omitempty"`
+	// Value is a Rate, not a float64: a document embeds its tax as a JSON
+	// number while /taxes.json returns a string for the same field.
+	Value Rate `json:"value,omitempty"`
 }
 
 // GlobalDiscount represents a discount applied to the whole document.
@@ -150,7 +152,7 @@ type InvoiceUpdateRequest = InvoiceCreateRequest
 type Invoice struct {
 	ID                     int64         `json:"id"`
 	Status                 string        `json:"status"`
-	Archived               bool          `json:"archived"`
+	Archived               Flag          `json:"archived"`
 	Type                   string        `json:"type"`
 	SequenceNumber         string        `json:"sequence_number"`
 	InvertedSequenceNumber string        `json:"inverted_sequence_number"`
@@ -317,10 +319,15 @@ type ItemCreateRequest struct {
 type ItemUpdateRequest = ItemCreateRequest
 
 // Sequence represents a document numbering sequence.
+//
+// The API names the series "serie" when it returns a sequence and
+// "serie_number" when it accepts one, so SerieNumber is filled from either key
+// (see UnmarshalJSON). DefaultSequence is a Flag because the API writes it as
+// 1/0, not true/false.
 type Sequence struct {
 	ID              int64  `json:"id"`
 	SerieNumber     string `json:"serie_number"`
-	DefaultSequence bool   `json:"default_sequence"`
+	DefaultSequence Flag   `json:"default_sequence"`
 }
 
 // SequenceCreateRequest holds data for creating a sequence.
@@ -329,20 +336,31 @@ type SequenceCreateRequest struct {
 }
 
 // Tax represents a tax rate in InvoiceXpress.
+//
+// The wire shapes here are the API's, not the documentation's: /taxes.json
+// returns the rate as a string ("23.0"), marks the account default with
+// "default_tax": 1 rather than "is_default": true, and sends null for an
+// unset region or code.
 type Tax struct {
-	ID        int64   `json:"id"`
-	Name      string  `json:"name"`
-	Value     float64 `json:"value"`
-	Region    string  `json:"region"`
-	IsDefault bool    `json:"is_default"`
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Value     Rate   `json:"value"`
+	Region    string `json:"region"`
+	Code      string `json:"code"`
+	IsDefault Flag   `json:"default_tax"`
 }
 
-// TaxCreateRequest holds data for creating a tax.
+// TaxCreateRequest holds data for creating a tax. Rate marshals as a JSON
+// number, the shape this endpoint is documented to take.
+//
+// IsDefault keeps the "is_default" key: tax creation is not documented, and
+// the response-side name ("default_tax") is not evidence for the request. It
+// is unverified against the live API — this library never creates taxes.
 type TaxCreateRequest struct {
-	Name      string  `json:"name"`
-	Value     float64 `json:"value"`
-	Region    string  `json:"region,omitempty"`
-	IsDefault bool    `json:"is_default,omitempty"`
+	Name      string `json:"name"`
+	Value     Rate   `json:"value"`
+	Region    string `json:"region,omitempty"`
+	IsDefault bool   `json:"is_default,omitempty"`
 }
 
 // TaxUpdateRequest holds data for updating a tax.

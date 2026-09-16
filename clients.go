@@ -92,11 +92,11 @@ func (s *ClientsService) FindByCode(ctx context.Context, code string) (*Customer
 // ListInvoices returns the invoices for a specific client.
 func (s *ClientsService) ListInvoices(ctx context.Context, clientID int64, opts *ListOptions) ([]Invoice, *PageInfo, error) {
 	path := fmt.Sprintf("/clients/%d/invoices.json", clientID)
-	var resp invoiceListResponse
+	resp := documentListEnvelope{docType: DocumentTypeInvoice}
 	if err := s.client.do(ctx, http.MethodGet, path, paginationParams(opts), nil, &resp); err != nil {
 		return nil, nil, fmt.Errorf("invoicexpress: clients.list-invoices: %w", err)
 	}
-	return resp.Invoices, &resp.Pagination, nil
+	return resp.docs, &resp.page, nil
 }
 
 // ListAll returns all clients across all pages.

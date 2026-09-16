@@ -79,7 +79,11 @@ amount.Float64()                // for display/aggregation only
 ```
 
 `Decimal` decodes from either a JSON string (`"29.99"`) or number (`29.99`).
-Tax *rates* (percentages) remain `float64`.
+Tax *rates* (percentages) are `Rate`, whose underlying type is `float64`; it
+decodes from either shape too, because the API returns `"23.0"` from
+`/taxes.json` and `23.0` for the same rate embedded in a document. Booleans
+are `Flag` (underlying type `bool`) for the same reason: the API writes some
+of them as `1`/`0`.
 
 ## Errors
 
