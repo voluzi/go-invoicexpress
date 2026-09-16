@@ -78,7 +78,7 @@ func redactAPIKeyInURL(raw string) string {
 
 const (
 	// Version is the library version, surfaced in the default User-Agent.
-	Version = "0.4.0"
+	Version = "0.4.1"
 
 	defaultBaseURLFormat = "https://%s.app.invoicexpress.com"
 	defaultTimeout       = 30 * time.Second

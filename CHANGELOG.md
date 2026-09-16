@@ -6,7 +6,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.4.0] - 2026-09-16
+## [0.4.1] - 2026-09-16
 
 ### Added
 - Clients carry the `language` that decides what language InvoiceXpress
