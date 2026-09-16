@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-16
+
+### Added
+- Clients carry the `language` that decides what language InvoiceXpress
+  produces their documents in. Absent from the published API reference, but
+  returned on every client read and accepted on write.
+- `NullableString`, with `String` and `Null` constructors, for a write field
+  whose "account default" is JSON null rather than an empty string.
+
+### Fixed
+- A `NullableString` whose token is rejected is left exactly as it was found,
+  so a refused value cannot be marked as set and written back on the next
+  request.
+
 ## [0.3.0] - 2026-09-16
 
 ### Added
