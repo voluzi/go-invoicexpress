@@ -97,20 +97,28 @@ type MBReference struct {
 // ClientRef identifies an existing client by positive ID, then code, then
 // name. InvoiceXpress applies that precedence when more than one is present.
 type ClientRef struct {
-	ID           int64              `json:"id,omitempty"`
-	Name         string             `json:"name,omitempty"`
-	Code         string             `json:"code,omitempty"`
-	Email        string             `json:"email,omitempty"`
-	Address      string             `json:"address,omitempty"`
-	City         string             `json:"city,omitempty"`
-	PostalCode   string             `json:"postal_code,omitempty"`
-	Country      string             `json:"country,omitempty"`
-	FiscalID     string             `json:"fiscal_id,omitempty"`
-	Website      string             `json:"website,omitempty"`
-	Phone        string             `json:"phone,omitempty"`
-	Fax          string             `json:"fax,omitempty"`
-	Observations string             `json:"observations,omitempty"`
-	SendOptions  *ClientSendOptions `json:"send_options,omitempty"`
+	ID           int64  `json:"id,omitempty"`
+	Name         string `json:"name,omitempty"`
+	Code         string `json:"code,omitempty"`
+	Email        string `json:"email,omitempty"`
+	Address      string `json:"address,omitempty"`
+	City         string `json:"city,omitempty"`
+	PostalCode   string `json:"postal_code,omitempty"`
+	Country      string `json:"country,omitempty"`
+	FiscalID     string `json:"fiscal_id,omitempty"`
+	Website      string `json:"website,omitempty"`
+	Phone        string `json:"phone,omitempty"`
+	Fax          string `json:"fax,omitempty"`
+	Observations string `json:"observations,omitempty"`
+	// Language the client's documents are produced in, as a two-letter code:
+	// "en" for English, empty to leave the account's own default in place.
+	//
+	// Absent from the published API reference, but the field is returned on
+	// every client read and accepted on write — an account can be seen holding
+	// a mix of "en" and null. Only values observed in use should be sent: a
+	// guess here changes the language of a legal document.
+	Language    string             `json:"language,omitempty"`
+	SendOptions *ClientSendOptions `json:"send_options,omitempty"`
 }
 
 // ClientSendOptions configures how documents are sent to a client.
@@ -335,23 +343,29 @@ type Customer struct {
 	Phone        string `json:"phone"`
 	Fax          string `json:"fax"`
 	Observations string `json:"observations"`
+	// Language the client's documents are produced in ("en"), or empty for the
+	// account's own default. Returned on every client read.
+	Language string `json:"language"`
 }
 
 // ClientCreateRequest holds data for creating a client.
 type ClientCreateRequest struct {
-	Name         string             `json:"name"`
-	Code         string             `json:"code,omitempty"`
-	Email        string             `json:"email,omitempty"`
-	Address      string             `json:"address,omitempty"`
-	City         string             `json:"city,omitempty"`
-	PostalCode   string             `json:"postal_code,omitempty"`
-	Country      string             `json:"country,omitempty"`
-	FiscalID     string             `json:"fiscal_id,omitempty"`
-	Website      string             `json:"website,omitempty"`
-	Phone        string             `json:"phone,omitempty"`
-	Fax          string             `json:"fax,omitempty"`
-	Observations string             `json:"observations,omitempty"`
-	SendOptions  *ClientSendOptions `json:"send_options,omitempty"`
+	Name         string `json:"name"`
+	Code         string `json:"code,omitempty"`
+	Email        string `json:"email,omitempty"`
+	Address      string `json:"address,omitempty"`
+	City         string `json:"city,omitempty"`
+	PostalCode   string `json:"postal_code,omitempty"`
+	Country      string `json:"country,omitempty"`
+	FiscalID     string `json:"fiscal_id,omitempty"`
+	Website      string `json:"website,omitempty"`
+	Phone        string `json:"phone,omitempty"`
+	Fax          string `json:"fax,omitempty"`
+	Observations string `json:"observations,omitempty"`
+	// Language the client's documents are produced in: "en", or empty to leave
+	// the account's default. See ClientRef.Language.
+	Language    string             `json:"language,omitempty"`
+	SendOptions *ClientSendOptions `json:"send_options,omitempty"`
 }
 
 // ClientUpdateRequest holds data for updating a client.

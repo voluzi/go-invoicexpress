@@ -10,6 +10,52 @@ import (
 	"time"
 )
 
+// The client's language decides what language InvoiceXpress produces the
+// document in. It is absent from the published reference but returned on every
+// client and accepted on write, so it has to survive the round trip: sent when
+// set, and omitted entirely when not, so a client keeps the account default
+// rather than being switched to an empty language.
+func TestClientLanguageIsSentAndOmitted(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		language string
+		want     any
+		present  bool
+	}{
+		{name: "english", language: "en", want: "en", present: true},
+		{name: "unset leaves the account default", language: "", present: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotClient map[string]any
+			c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				var body map[string]map[string]any
+				raw, _ := io.ReadAll(r.Body)
+				_ = json.Unmarshal(raw, &body)
+				gotClient, _ = body["invoice"]["client"].(map[string]any)
+				w.Write([]byte(`{"invoice":{"id":1,"status":"draft"}}`))
+			})
+
+			if _, err := c.Invoices.Create(context.Background(), DocumentTypeInvoiceReceipt, &InvoiceCreateRequest{
+				Date:   NewDate(time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)),
+				Client: ClientRef{Name: "ACME", FiscalID: "999999990", Language: tc.language},
+				Items: []ItemRef{
+					{Name: "Plano Pro", UnitPrice: NewDecimal("50"), Quantity: NewDecimal("1"), Tax: &TaxRef{Name: "IVA23"}},
+				},
+			}); err != nil {
+				t.Fatalf("create: %v", err)
+			}
+
+			got, ok := gotClient["language"]
+			if ok != tc.present {
+				t.Fatalf("language present = %v, want %v (client: %v)", ok, tc.present, gotClient)
+			}
+			if tc.present && got != tc.want {
+				t.Errorf("language = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestInvoicesCreate(t *testing.T) {
 	var gotMethod, gotPath, gotAPIKey string
 	var gotBody map[string]json.RawMessage
