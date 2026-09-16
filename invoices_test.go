@@ -45,6 +45,13 @@ func TestClientLanguageIsSentAndOmitted(t *testing.T) {
 				t.Fatalf("create: %v", err)
 			}
 
+			// Without this the unset case passes for the wrong reason: indexing
+			// a nil map reports the key as absent, so a request that dropped
+			// the client block entirely would look identical to one that
+			// carried it with no language.
+			if gotClient == nil {
+				t.Fatalf("the request carried no invoice.client at all")
+			}
 			got, ok := gotClient["language"]
 			if ok != tc.present {
 				t.Fatalf("language present = %v, want %v (client: %v)", ok, tc.present, gotClient)
